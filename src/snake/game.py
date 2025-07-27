@@ -8,7 +8,6 @@ pygame.init()
 class Snake:
     def __init__(self, x, y):
         self.head = pygame.Rect(x, y, SIZE, SIZE)
-        self.color = GREEN
         self.is_alive = True
         self.body = []
 
@@ -31,7 +30,12 @@ class Snake:
             self.body = [block.move(block.x - 1, block.y) for block in self.body]
 
     def render(self, screen):
-        pass
+        # draw head
+        pygame.draw.rect(screen, GREEN, self.head)
+
+        # draw body
+        for item in self.body:
+            pygame.draw.rect(screen, GREEN, item)
 
 
 class Food:
@@ -43,34 +47,30 @@ class Food:
     def render(self, screen):
         pygame.draw.rect(screen, WHITE, self.rect)
 
+    def get_pos(self):
+        return pygame.Vector2(self.x, self.y)
+
 
 class Game:
-    def __init__(self, size=10):
-        self.size = size
+    def __init__(self):
         self.score = 0
         self.is_running = True
-        self.grid = self._init_board()
         self.clock = pygame.time.Clock()
 
         x, y = self._random_pos()
-        print(f"Snake pos - x:{x}, y:{y}")
         self.player = Snake(x, y)
 
         x, y = self._random_pos()
         self.food = Food(x, y)
-        print(f"Food pos - x:{x}, y:{y}")
 
         self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+        pygame.display.set_caption("Snake")
 
     def _random_pos(self):
         return (
             random.randint(0, WIDTH),
             random.randint(0, HEIGHT),
         )
-
-    # TODO: review
-    def _init_board(self):
-        return [[0] * (WIDTH // self.size)] * (HEIGHT // self.size)
 
     def _render(self):
         self.screen.fill(BLACK)
@@ -79,14 +79,13 @@ class Game:
         self.food.render(self.screen)
 
         # render snake
-        # self.player.render(self.screen)
+        self.player.render(self.screen)
 
         pygame.display.flip()
 
     def begin(self):
-        pygame.display.set_caption("Snake")
-        self.clock.tick(60)
         while self.is_running:
+            self.clock.tick(60)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.is_running = False
@@ -100,7 +99,7 @@ class Game:
                     if event.key == pygame.K_DOWN:
                         self.player.move("down")
 
-        self._render()
+            self._render()
 
 
 if __name__ == "__main__":
