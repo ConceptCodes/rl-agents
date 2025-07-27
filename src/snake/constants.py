@@ -1,0 +1,7 @@
+GREEN = (0, 255, 0)
+BLACK = (0, 0, 0)
+WHITE = (255, 255, 255)
+
+SIZE = 10
+WIDTH = 800
+HEIGHT = 600
