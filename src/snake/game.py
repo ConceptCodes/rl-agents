@@ -7,35 +7,38 @@ pygame.init()
 
 class Snake:
     def __init__(self, x, y):
-        self.head = pygame.Rect(x, y, SIZE, SIZE)
         self.is_alive = True
-        self.body = []
+        self.body = [pygame.Rect(x, y, SIZE, SIZE)]
+        self.vel = 5
+        self.head = self.body[0]
 
-    def eat(self, x, y):
-        self.body.append(pygame.Rect(x, y, SIZE, SIZE))
+    # TODO: needs review
+    def eat(self):
+        tail = self.body[-1]
+        self.body.append(pygame.Rect(tail.x + 1, tail.y, SIZE, SIZE))
 
-    # TODO: review, check for boundary collisions
     def move(self, dir):
         if dir == "up":
-            self.head.move(self.head.x, self.head.y + 1)
-            self.body = [block.move(block.x, block.y + 1) for block in self.body]
-        if dir == "down":
-            self.head.move(self.head.x, self.head.y - 1)
-            self.body = [block.move(block.x, block.y - 1) for block in self.body]
-        if dir == "right":
-            self.head.move(self.head.x + 1, self.head.y)
-            self.body = [block.move(block.x + 1, block.y) for block in self.body]
-        if dir == "left":
-            self.head.move(self.head.x - 1, self.head.y)
-            self.body = [block.move(block.x - 1, block.y) for block in self.body]
+            self.head.y -= self.vel
+        elif dir == "down":
+            self.head.y += self.vel
+        elif dir == "right":
+            self.head.x += self.vel
+        elif dir == "left":
+            self.head.x -= self.vel
+
+        # Check for boundary collisions
+        if (
+            self.head.x < 0
+            or self.head.x + SIZE > WIDTH
+            or self.head.y < 0
+            or self.head.y + SIZE > HEIGHT
+        ):
+            self.is_alive = False
 
     def render(self, screen):
-        # draw head
-        pygame.draw.rect(screen, GREEN, self.head)
-
-        # draw body
-        for item in self.body:
-            pygame.draw.rect(screen, GREEN, item)
+        for block in self.body:
+            pygame.draw.rect(screen, GREEN, block)
 
 
 class Food:
@@ -72,6 +75,10 @@ class Game:
             random.randint(0, HEIGHT),
         )
 
+    def _reset(self):
+        x, y = self._random_pos()
+        self.food = Food(x, y)
+
     def _render(self):
         self.screen.fill(BLACK)
 
@@ -89,6 +96,8 @@ class Game:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.is_running = False
+                if not self.player.is_alive:
+                    self.is_running = False
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_LEFT:
                         self.player.move("left")
@@ -98,6 +107,11 @@ class Game:
                         self.player.move("up")
                     if event.key == pygame.K_DOWN:
                         self.player.move("down")
+
+            x, y = self.food.get_pos()
+            if self.player.head.collidepoint(x, y):
+                self.player.eat()
+                self._reset()
 
             self._render()
 
