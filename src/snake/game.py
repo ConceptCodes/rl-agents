@@ -107,7 +107,20 @@ class Game:
             self.player.render(self.screen)
             pygame.display.flip()
 
-    def begin(self):
+    def _handle_input(self, val):
+        self.player.next_direction = val
+        self.player.move()
+
+    def _collision_check(self):
+        x, y = self.food.get_pos()
+        return self.player.head.collidepoint(x, y)
+            
+
+    def end():
+        pygame.quit()
+        exit()
+
+    def start(self):
         while self.is_running:
             self.clock.tick(FPS)
             for event in pygame.event.get():
@@ -117,26 +130,22 @@ class Game:
                     self.is_running = False
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_LEFT:
-                        self.player.next_direction = "left"
+                        self._handle_input("left")
                     if event.key == pygame.K_RIGHT:
-                        self.player.next_direction = "right"
+                        self._handle_input("right")
                     if event.key == pygame.K_UP:
-                        self.player.next_direction = "up"
+                        self._handle_input("up")
                     if event.key == pygame.K_DOWN:
-                        self.player.next_direction = "down"
+                        self._handle_input("down")
 
-            self.player.move()
-
-            x, y = self.food.get_pos()
-            if self.player.head.collidepoint(x, y):
+            if self._collision_check():
                 self.player.eat()
                 self._reset()
-
             self._render()
+
+        self.end()
 
 
 if __name__ == "__main__":
     game = Game()
-    game.begin()
-    pygame.quit()
-    exit()
+    game.start()
