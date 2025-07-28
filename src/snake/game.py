@@ -1,6 +1,6 @@
 import pygame
 import random
-from constants import GREEN, BLACK, WHITE, SIZE, WIDTH, HEIGHT
+from constants import GREEN, BLACK, WHITE, SIZE, WIDTH, HEIGHT, FPS
 
 pygame.init()
 
@@ -9,32 +9,51 @@ class Snake:
     def __init__(self, x, y):
         self.is_alive = True
         self.body = [pygame.Rect(x, y, SIZE, SIZE)]
-        self.vel = 5
-        self.head = self.body[0]
+        self.vel = SIZE
+        self.direction = "right"
+        self.next_direction = "right"
 
-    # TODO: needs review
     def eat(self):
         tail = self.body[-1]
-        self.body.append(pygame.Rect(tail.x + 1, tail.y, SIZE, SIZE))
+        self.body.append(pygame.Rect(tail.x, tail.y, SIZE, SIZE))
 
-    def move(self, dir):
-        if dir == "up":
-            self.head.y -= self.vel
-        elif dir == "down":
-            self.head.y += self.vel
-        elif dir == "right":
-            self.head.x += self.vel
-        elif dir == "left":
-            self.head.x -= self.vel
+    def move(self):
+        if (
+            (self.next_direction == "up" and self.direction != "down")
+            or (self.next_direction == "down" and self.direction != "up")
+            or (self.next_direction == "left" and self.direction != "right")
+            or (self.next_direction == "right" and self.direction != "left")
+        ):
+            self.direction = self.next_direction
+
+        # Calculate new head position
+        head = self.body[0].copy()
+        if self.direction == "up":
+            head.y -= self.vel
+        elif self.direction == "down":
+            head.y += self.vel
+        elif self.direction == "right":
+            head.x += self.vel
+        elif self.direction == "left":
+            head.x -= self.vel
+
+        # Insert new head and remove tail
+        self.body.insert(0, head)
+        self.body.pop()
 
         # Check for boundary collisions
-        if (
-            self.head.x < 0
-            or self.head.x + SIZE > WIDTH
-            or self.head.y < 0
-            or self.head.y + SIZE > HEIGHT
-        ):
+        if head.x < 0 or head.x + SIZE > WIDTH or head.y < 0 or head.y + SIZE > HEIGHT:
             self.is_alive = False
+
+        # Check for self collision
+        for segment in self.body[1:]:
+            if head.colliderect(segment):
+                self.is_alive = False
+                break
+
+    @property
+    def head(self):
+        return self.body[0]
 
     def render(self, screen):
         for block in self.body:
@@ -55,10 +74,11 @@ class Food:
 
 
 class Game:
-    def __init__(self):
+    def __init__(self, title="Snake", render_ui=True):
         self.score = 0
         self.is_running = True
         self.clock = pygame.time.Clock()
+        self.render_ui = render_ui
 
         x, y = self._random_pos()
         self.player = Snake(x, y)
@@ -66,13 +86,14 @@ class Game:
         x, y = self._random_pos()
         self.food = Food(x, y)
 
-        self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
-        pygame.display.set_caption("Snake")
+        if self.render_ui:
+            self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            pygame.display.set_caption(title)
 
     def _random_pos(self):
         return (
-            random.randint(0, WIDTH),
-            random.randint(0, HEIGHT),
+            random.randrange(0, WIDTH, SIZE),
+            random.randrange(0, HEIGHT, SIZE),
         )
 
     def _reset(self):
@@ -80,19 +101,15 @@ class Game:
         self.food = Food(x, y)
 
     def _render(self):
-        self.screen.fill(BLACK)
-
-        # render food
-        self.food.render(self.screen)
-
-        # render snake
-        self.player.render(self.screen)
-
-        pygame.display.flip()
+        if self.render_ui:
+            self.screen.fill(BLACK)
+            self.food.render(self.screen)
+            self.player.render(self.screen)
+            pygame.display.flip()
 
     def begin(self):
         while self.is_running:
-            self.clock.tick(60)
+            self.clock.tick(FPS)
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     self.is_running = False
@@ -100,13 +117,15 @@ class Game:
                     self.is_running = False
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_LEFT:
-                        self.player.move("left")
+                        self.player.next_direction = "left"
                     if event.key == pygame.K_RIGHT:
-                        self.player.move("right")
+                        self.player.next_direction = "right"
                     if event.key == pygame.K_UP:
-                        self.player.move("up")
+                        self.player.next_direction = "up"
                     if event.key == pygame.K_DOWN:
-                        self.player.move("down")
+                        self.player.next_direction = "down"
+
+            self.player.move()
 
             x, y = self.food.get_pos()
             if self.player.head.collidepoint(x, y):
@@ -119,6 +138,5 @@ class Game:
 if __name__ == "__main__":
     game = Game()
     game.begin()
-
     pygame.quit()
     exit()
