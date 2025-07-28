@@ -5,7 +5,7 @@ from game import Game
 from constants import WIDTH, HEIGHT, SIZE
 
 # 🎯 What skill should the agent learn? [how to play the game snake]
-# 👀 What information does the agent need? [food_pos, head_pos, body_segment_positions]
+# 👀 What information does the agent need? [food_pos, head_pos, distance_from_food]
 # 🎮 What actions can the agent take? [Discrete choices: up, down, left, right]
 # 🏆 How do we measure success? [food_collision]
 # ⏰ When should episodes end? [food_collision, body_collision, maximum steps reached]
@@ -23,14 +23,16 @@ class SnakeEnv(gym.Env):
             title="Snake - RL Training", render_ui=self.render_mode == "human"
         )
 
-        # Observation space [food_x, food_y, head_vel_x, head_vel_y, head_x, head_y]
-        # NOTE: should i introduce direction instead of velocity
-        # TODO: add body
-        velocity = self.game.player.vel
+        adjusted_width = WIDTH - SIZE
+        adjusted_height = HEIGHT - SIZE
+
+        # Observation space [rel_food_x, rel_food_y, head_x, head_y, direction]
         self.observation_space = gym.spaces.Box(
-            low=np.array([0, 0, -velocity, -velocity, 0, 0], dtype=np.float32),
+            low=np.array(
+                [-adjusted_width, -adjusted_height, 0, 0, 0], dtype=np.float32
+            ),
             high=np.array(
-                [WIDTH, HEIGHT, velocity, velocity, HEIGHT - SIZE, WIDTH - SIZE],
+                [adjusted_width, adjusted_height, adjusted_width, adjusted_height, 3],
                 dtype=np.float32,
             ),
             dtype=np.float32,
@@ -43,16 +45,18 @@ class SnakeEnv(gym.Env):
         """Convert internal state to observation format.
 
         Returns:
-            np.array: Observation with food and player positions/velocities
+            np.array: Observation with relative food and player positions
         """
+        dir_map = {"up": 0, "down": 1, "left": 2, "right": 3}
+        rel_food_x = self.game.food.x - self.game.player.head.x
+        rel_food_y = self.game.food.y - self.game.player.head.y
         return np.array(
             [
-                self.game.food.x,
-                self.game.food.y,
-                0,  # TODO: add head velocity x
-                0,  # TODO: add head velocity x
+                rel_food_x,
+                rel_food_y,
                 self.game.player.head.x,
                 self.game.player.head.y,
+                dir_map[self.game.player.direction],
             ],
             dtype=np.float32,
         )
@@ -69,6 +73,10 @@ class SnakeEnv(gym.Env):
             "body_length": len(self.game.player.body),
             "direction": self.game.player.direction,
             "next_direction": self.game.player.next_direction,
+            "collision": self.game._collision_check(),
+            "alive": self.game.player.is_alive,
+            "distance": (self.game.player.head.x - self.game.food.x) ** 2
+            + (self.game.player.head.y - self.game.food.y) ** 2,
             "step": self.current_step,
         }
 
@@ -84,9 +92,8 @@ class SnakeEnv(gym.Env):
         """
         super().reset(seed=seed)
 
-        self.current_step = 0
-
         self.game._reset()
+        self.current_step = 0
 
         obs = self._get_obs()
         info = self._get_info()
@@ -108,28 +115,32 @@ class SnakeEnv(gym.Env):
         direction = action_map[action]
 
         self.game._handle_input(direction)
+        self.game.player.move()
 
-        reward = 0
+        # Calculate distance to food before and after move
+        prev_dist = getattr(self, "_prev_dist", None)
+        curr_dist = (self.game.player.head.x - self.game.food.x) ** 2 + (
+            self.game.player.head.y - self.game.food.y
+        ) ** 2
+        self._prev_dist = curr_dist
+
+        reward = -0.01  # small negative reward per step
         terminated = False
+
+        max_distance = (WIDTH - SIZE) ** 2 + (HEIGHT - SIZE) ** 2
 
         if self.game._collision_check():
             reward = 10
-            terminated = True
+            self.game.player.eat()
         elif not self.game.player.is_alive:
             reward = -10
             terminated = True
         else:
-            # small reward for proximity of head to food
-            distance = (self.game.player.head.x - self.game.food.x) ** 2 + (
-                self.game.player.head.y - self.game.food.y
-            ) ** 2
-            reward -= 0.01 * distance
+            # Reward for getting closer to food, penalize for moving away
+            if prev_dist is not None:
+                reward += 0.1 * (prev_dist - curr_dist) / (max_distance + 1e-8)
 
         truncated = self.current_step >= self.max_steps
-
-        if self._collision_check():
-            self.player.eat()
-            self._reset()
 
         obs = self._get_obs()
         info = self._get_info()
@@ -139,6 +150,8 @@ class SnakeEnv(gym.Env):
     def render(self):
         if self.render_mode == "human":
             self.game._render()
+        if self.render_mode == "rgb_array":
+            self.game._record()
 
     def close(self):
         if self.render_mode == "human":

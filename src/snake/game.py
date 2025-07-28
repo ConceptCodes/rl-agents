@@ -1,5 +1,9 @@
+import os
 import pygame
 import random
+import time
+import numpy as np
+
 from constants import GREEN, BLACK, WHITE, SIZE, WIDTH, HEIGHT, FPS
 
 pygame.init()
@@ -74,11 +78,12 @@ class Food:
 
 
 class Game:
-    def __init__(self, title="Snake", render_ui=True):
+    def __init__(self, title="Snake", render_ui=True, record=False):
         self.score = 0
         self.is_running = True
         self.clock = pygame.time.Clock()
         self.render_ui = render_ui
+        self.record = record
 
         x, y = self._random_pos()
         self.player = Snake(x, y)
@@ -100,6 +105,10 @@ class Game:
         x, y = self._random_pos()
         self.food = Food(x, y)
 
+        if not self.player.is_alive:
+            x, y = self._random_pos()
+            self.player = Snake(x, y)
+
     def _render(self):
         if self.render_ui:
             self.screen.fill(BLACK)
@@ -107,15 +116,18 @@ class Game:
             self.player.render(self.screen)
             pygame.display.flip()
 
+    def _record(self):
+        if self.record:
+            return pygame.surfarray.array2d(self.screen)
+
     def _handle_input(self, val):
         self.player.next_direction = val
 
     def _collision_check(self):
         x, y = self.food.get_pos()
         return self.player.head.collidepoint(x, y)
-            
 
-    def end():
+    def end(self):
         pygame.quit()
         exit()
 
@@ -126,7 +138,7 @@ class Game:
                 if event.type == pygame.QUIT:
                     self.is_running = False
                 if not self.player.is_alive:
-                    self.is_running = False
+                    self._reset()
                 if event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_LEFT:
                         self._handle_input("left")
@@ -136,13 +148,14 @@ class Game:
                         self._handle_input("up")
                     if event.key == pygame.K_DOWN:
                         self._handle_input("down")
-                        
+
             self.player.move()
 
             if self._collision_check():
                 self.player.eat()
                 self._reset()
             self._render()
+            self._record()
 
         self.end()
 

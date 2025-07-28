@@ -2,3 +2,4 @@ gymnasium[atari,box2d,classic_control,robotics,mujoco]
 swig
 pygame
 numpy
+tensorboard

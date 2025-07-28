@@ -15,11 +15,11 @@ pip install -r requirements.txt
 To train the agent, run:
 
 ```bash
-python train.py
+python src/snake/train.py
 ```
 
 To evaluate the agent, run:
 
 ```bash
-python evaluate.py
+python src/snake/evaluate.py
 ```
