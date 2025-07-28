@@ -109,7 +109,6 @@ class Game:
 
     def _handle_input(self, val):
         self.player.next_direction = val
-        self.player.move()
 
     def _collision_check(self):
         x, y = self.food.get_pos()
@@ -137,6 +136,8 @@ class Game:
                         self._handle_input("up")
                     if event.key == pygame.K_DOWN:
                         self._handle_input("down")
+                        
+            self.player.move()
 
             if self._collision_check():
                 self.player.eat()
