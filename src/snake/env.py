@@ -10,7 +10,7 @@ from constants import WIDTH, HEIGHT, SIZE, FPS
 # 👀 What information does the agent need? [food_pos, head_pos, distance_from_food]
 # 🎮 What actions can the agent take? [Discrete choices: up, down, left, right]
 # 🏆 How do we measure success? [food_collision]
-# ⏰ When should episodes end? [food_collision, body_collision, maximum steps reached]
+# ⏰ When should episodes end? [body_collision, boundary_collision, maximum steps reached]
 
 
 class SnakeEnv(gym.Env):
@@ -29,13 +29,21 @@ class SnakeEnv(gym.Env):
         adjusted_width = WIDTH - SIZE
         adjusted_height = HEIGHT - SIZE
 
-        # Observation space [rel_food_x, rel_food_y, head_x, head_y, direction]
+        # Observation space [rel_food_x, rel_food_y, food_x, food_y, head_x, head_y, direction]
         self.observation_space = gym.spaces.Box(
             low=np.array(
-                [-adjusted_width, -adjusted_height, 0, 0, 0], dtype=np.float32
+                [-adjusted_width, -adjusted_height, 0, 0, 0, 0, 0], dtype=np.float32
             ),
             high=np.array(
-                [adjusted_width, adjusted_height, adjusted_width, adjusted_height, 3],
+                [
+                    adjusted_width,
+                    adjusted_height,
+                    adjusted_width,
+                    adjusted_height,
+                    adjusted_width,
+                    adjusted_height,
+                    3,
+                ],
                 dtype=np.float32,
             ),
             dtype=np.float32,
@@ -57,6 +65,8 @@ class SnakeEnv(gym.Env):
             [
                 rel_food_x,
                 rel_food_y,
+                self.game.food.x,
+                self.game.food.y,
                 self.game.player.head.x,
                 self.game.player.head.y,
                 dir_map[self.game.player.direction],
@@ -130,6 +140,10 @@ class SnakeEnv(gym.Env):
 
         reward = -0.01  # small negative reward per step
         terminated = False
+
+        # small reward for body length
+        if len(self.game.player.body) > 1:
+            reward += 0.1 * (len(self.game.player.body) - 1)
 
         max_distance = (WIDTH - SIZE) ** 2 + (HEIGHT - SIZE) ** 2
 

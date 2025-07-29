@@ -6,11 +6,13 @@ from collections import defaultdict
 
 
 def discretize(obs, bins):
-    # obs: [rel_food_x, rel_food_y, head_x, head_y, direction]
+    # obs: [rel_food_x, rel_food_y, food_x, food_y, head_x, head_y, direction]
     # bins: list of bin counts for each dimension
     bin_ranges = [
         np.linspace(-800, 800, bins[0]),  # rel_food_x
         np.linspace(-600, 600, bins[1]),  # rel_food_y
+        np.linspace(0, 800, bins[2]),  # food_x
+        np.linspace(0, 600, bins[3]),  # food_y
         np.linspace(0, 800, bins[2]),  # head_x
         np.linspace(0, 600, bins[3]),  # head_y
         np.linspace(0, 3, bins[4]),  # direction (0,1,2,3)
@@ -21,13 +23,21 @@ def discretize(obs, bins):
 def main():
 
     env = SnakeEnv(render_mode="human")
-    num_episodes = 5_000
+    num_episodes = 1_000
     alpha = 0.1  # learning rate
     gamma = 0.99  # discount factor
     epsilon = 1.0  # exploration rate
     epsilon_min = 0.05
     epsilon_decay = 0.995
-    bins = [15, 15, 10, 10, 4]  # discretization bins for each obs dim (tune as needed)
+    bins = [
+        15,
+        15,
+        10,
+        10,
+        10,
+        10,
+        4,
+    ]  # discretization bins for each obs dim
     q_table = defaultdict(lambda: np.zeros(env.action_space.n))
 
     for episode in range(num_episodes):

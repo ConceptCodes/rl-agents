@@ -59,6 +59,12 @@ class Snake:
     def head(self):
         return self.body[0]
 
+    def clear(self):
+        self.body = [pygame.Rect(self.head.x, self.head.y, SIZE, SIZE)]
+        self.is_alive = True
+        self.direction = "right"
+        self.next_direction = "right"
+
     def render(self, screen):
         for block in self.body:
             pygame.draw.rect(screen, GREEN, block)
