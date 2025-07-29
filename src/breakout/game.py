@@ -1,0 +1,140 @@
+import pygame
+from constants import (
+    WIDTH,
+    HEIGHT,
+    BLACK,
+    WHITE,
+    FPS,
+    BALL_SPEED,
+    BALL_RADIUS,
+    PADDLE_LENGTH,
+    PADDLE_SPEED,
+)
+
+pygame.init()
+
+
+class Ball:
+    def __init__(self, posx, posy, radius, speed, color):
+        self.pos = pygame.Vector2(posx, posy)
+        self.radius = radius
+        self.speed = speed
+        self.color = color
+        self.direction = pygame.Vector2(1, -1)
+        self.first_time = True
+
+    def display(self, surface):
+        pygame.draw.circle(
+            surface, self.color, (int(self.pos.x), int(self.pos.y)), self.radius
+        )
+
+    def update(self):
+        self.pos += self.direction * self.speed
+
+        if self.pos.y <= 0 or self.pos.y >= HEIGHT:
+            self.direction.y *= -1
+
+        if self.pos.x <= 0 and self.first_time:
+            self.first_time = False
+            return 1
+        elif self.pos.x >= WIDTH and self.first_time:
+            self.first_time = False
+            return -1
+        return 0
+
+    def reset(self):
+        self.pos = pygame.Vector2(WIDTH // 2, HEIGHT // 2)
+        self.direction.x *= -1
+        self.first_time = True
+
+    def hit(self):
+        self.direction.x *= -1
+        # self.direction.y *= -1
+
+    def get_rect(self):
+        return pygame.Rect(
+            int(self.pos.x - self.radius),
+            int(self.pos.y - self.radius),
+            self.radius * 2,
+            self.radius * 2,
+        )
+
+    def _get_pos(self):
+        return self.pos
+
+
+class Block:
+    def __init__(self):
+        pass
+
+
+class Paddle:
+    def __init__(self, x, y, color=WHITE, width=PADDLE_LENGTH, speed=PADDLE_SPEED):
+        self.direction = "right"
+        self.x = x
+        self.y = y
+        self.rect = pygame.Rect(x, y, width, width // 2)
+        self.color = color
+        self.speed = speed
+
+    def display(self, surface):
+        pygame.draw.rect(surface, self.color, self.rect)
+
+    def update(self):
+        input_map = {"left": -1, "right": 1}
+        self.rect.x += self.speed * input_map[self.direction]
+        self.rect.x = max(0, min(self.rect.x, WIDTH - self.rect.width))
+
+
+class Game:
+    def __init__(self, title="Breakout", render_ui=True, record=False):
+        self.ball = Ball(WIDTH // 2, HEIGHT // 2, BALL_RADIUS, BALL_SPEED, WHITE)
+        self.paddle = Paddle(0, HEIGHT)
+        self.blocks = []
+        self.barrier_rect = pygame.Rect(0, 20, WIDTH, HEIGHT)
+
+        self.clock = pygame.time.Clock()
+        self.is_running = True
+        self.render_ui = render_ui
+        self.record = record
+
+        if self.render_ui:
+            self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
+            pygame.display.set_caption(title)
+
+    def _handle_input(self, val):
+        self.paddle.direction = val
+
+    def reset(self):
+        pass
+
+    def _border_collision(self):
+        return self.ball.get_rect().colliderect(self.barrier_rect)
+
+    def start(self):
+        while self.is_running:
+            self.screen.fill(BLACK)
+            self.ball.display(self.screen)
+            self.paddle.display(self.screen)
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    self.is_running = False
+                if self._border_collision():
+                    self.reset()
+
+                if event.type == pygame.KEYDOWN:
+                    if event.key == pygame.K_LEFT:
+                        self._handle_input("left")
+                    if event.key == pygame.K_RIGHT:
+                        self._handle_input("right")
+
+            self.paddle.update()
+
+            pygame.display.update()
+            self.clock.tick(FPS)
+
+
+if __name__ == "__main__":
+    game = Game()
+    game.start()
