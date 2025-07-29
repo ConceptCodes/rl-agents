@@ -8,7 +8,6 @@ from collections import defaultdict
 def discretize(obs, bins):
     # obs: [rel_food_x, rel_food_y, head_x, head_y, direction]
     # bins: list of bin counts for each dimension
-    # Adjust bin ranges to match the 800x600 grid and direction
     bin_ranges = [
         np.linspace(-800, 800, bins[0]),  # rel_food_x
         np.linspace(-600, 600, bins[1]),  # rel_food_y

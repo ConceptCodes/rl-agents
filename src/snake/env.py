@@ -1,8 +1,10 @@
 import gymnasium as gym
 import numpy as np
 from typing import Optional
+
+import pygame
 from game import Game
-from constants import WIDTH, HEIGHT, SIZE
+from constants import WIDTH, HEIGHT, SIZE, FPS
 
 # 🎯 What skill should the agent learn? [how to play the game snake]
 # 👀 What information does the agent need? [food_pos, head_pos, distance_from_food]
@@ -18,6 +20,7 @@ class SnakeEnv(gym.Env):
         self.render_mode = render_mode
         self.max_steps = max_steps
         self.current_step = 0
+        self.clock = pygame.time.Clock()
 
         self.game = Game(
             title="Snake - RL Training", render_ui=self.render_mode == "human"
@@ -109,6 +112,7 @@ class SnakeEnv(gym.Env):
         Returns:
             tuple: (observation, reward, terminated, truncated, info)
         """
+        self.clock.tick(FPS)
         self.current_step += 1
 
         action_map = {0: "up", 1: "down", 2: "left", 3: "right"}
