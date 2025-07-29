@@ -107,13 +107,20 @@ class Game:
             random.randrange(0, HEIGHT, SIZE),
         )
 
-    def _reset(self):
+    def _reset_food(self):
         x, y = self._random_pos()
         self.food = Food(x, y)
 
-        if not self.player.is_alive:
+    def _reset_player(self):
+        x, y = self._random_pos()
+        while x == self.food.x and y == self.food.y:
             x, y = self._random_pos()
-            self.player = Snake(x, y)
+        self.player = Snake(x, y)
+
+    def _reset(self):
+        self._reset_food()
+        if not self.player.is_alive:
+            self._reset_player()
 
     def _render(self):
         if self.render_ui:

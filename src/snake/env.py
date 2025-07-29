@@ -150,6 +150,7 @@ class SnakeEnv(gym.Env):
         if self.game._collision_check():
             reward = 10
             self.game.player.eat()
+            self.game._reset_food()
         elif not self.game.player.is_alive:
             reward = -10
             terminated = True
