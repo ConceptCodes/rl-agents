@@ -9,6 +9,7 @@ from constants import (
     BALL_RADIUS,
     PADDLE_LENGTH,
     PADDLE_SPEED,
+    PADDLE_HEIGHT,
 )
 
 pygame.init()
@@ -69,11 +70,19 @@ class Block:
 
 
 class Paddle:
-    def __init__(self, x, y, color=WHITE, width=PADDLE_LENGTH, speed=PADDLE_SPEED):
+    def __init__(
+        self,
+        x,
+        y,
+        color=WHITE,
+        width=PADDLE_LENGTH,
+        height=PADDLE_HEIGHT,
+        speed=PADDLE_SPEED,
+    ):
         self.direction = "right"
         self.x = x
         self.y = y
-        self.rect = pygame.Rect(x, y, width, width // 2)
+        self.rect = pygame.Rect(x, y, width, height)
         self.color = color
         self.speed = speed
 
@@ -89,9 +98,10 @@ class Paddle:
 class Game:
     def __init__(self, title="Breakout", render_ui=True, record=False):
         self.ball = Ball(WIDTH // 2, HEIGHT // 2, BALL_RADIUS, BALL_SPEED, WHITE)
-        self.paddle = Paddle(0, HEIGHT)
+        self.paddle = Paddle(0, HEIGHT - 100)
         self.blocks = []
         self.barrier_rect = pygame.Rect(0, 20, WIDTH, HEIGHT)
+        self.score = 0
 
         self.clock = pygame.time.Clock()
         self.is_running = True
@@ -106,7 +116,7 @@ class Game:
         self.paddle.direction = val
 
     def reset(self):
-        pass
+        self.score = 0
 
     def _border_collision(self):
         return self.ball.get_rect().colliderect(self.barrier_rect)
