@@ -13,29 +13,28 @@ def discretize(obs, bins):
         np.linspace(-600, 600, bins[1]),  # rel_food_y
         np.linspace(0, 800, bins[2]),  # food_x
         np.linspace(0, 600, bins[3]),  # food_y
-        np.linspace(0, 800, bins[2]),  # head_x
-        np.linspace(0, 600, bins[3]),  # head_y
-        np.linspace(0, 3, bins[4]),  # direction (0,1,2,3)
+        np.linspace(0, 800, bins[4]),  # head_x
+        np.linspace(0, 600, bins[5]),  # head_y
+        np.linspace(0, 3, bins[6]),  # direction (0=up, 1=down, 2=left, 3=right)
     ]
-    return tuple(int(np.digitize(o, r)) for o, r in zip(obs, bin_ranges))
+    return tuple(np.digitize(o, r) for o, r in zip(obs, bin_ranges))
 
 
 def main():
-
     env = SnakeEnv(render_mode="human")
     num_episodes = 1_000
-    alpha = 0.1  # learning rate
+    alpha = 0.01  # learning rate
     gamma = 0.99  # discount factor
     epsilon = 1.0  # exploration rate
     epsilon_min = 0.05
     epsilon_decay = 0.995
     bins = [
-        15,
-        15,
         10,
         10,
-        10,
-        10,
+        8,
+        8,
+        8,
+        8,
         4,
     ]  # discretization bins for each obs dim
     q_table = defaultdict(lambda: np.zeros(env.action_space.n))
