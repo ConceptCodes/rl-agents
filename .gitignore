@@ -12,3 +12,5 @@ build/
 *.log
 *.DS_Store
 *.coverage  
+
+*.npy

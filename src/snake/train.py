@@ -21,8 +21,8 @@ def discretize(obs, bins):
 
 
 def main():
-    env = SnakeEnv(render_mode="human")
-    num_episodes = 1_000
+    env = SnakeEnv()
+    num_episodes = 10_000
     alpha = 0.01  # learning rate
     gamma = 0.99  # discount factor
     epsilon = 1.0  # exploration rate
@@ -69,6 +69,11 @@ def main():
             done = terminated or truncated
 
         epsilon = max(epsilon * epsilon_decay, epsilon_min)
+
+        # save every 1000 episodes for evaluation
+        if (episode + 1) % 1000 == 0:
+            np.save(f"src/snake/models/q_table_ep{episode+1}.npy", dict(q_table))
+
         print(
             f"Episode {episode+1}: Total Reward = {total_reward:.2f}, Steps = {steps}, Epsilon = {epsilon:.3f}"
         )

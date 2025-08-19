@@ -138,7 +138,7 @@ class SnakeEnv(gym.Env):
         ) ** 2
         self._prev_dist = curr_dist
 
-        reward = -0.01  # small negative reward per step
+        reward = -0.05  # small negative reward per step
         terminated = False
 
         # small reward for body length
@@ -148,7 +148,7 @@ class SnakeEnv(gym.Env):
         max_distance = (WIDTH - SIZE) ** 2 + (HEIGHT - SIZE) ** 2
 
         if self.game._collision_check():
-            reward = 10
+            reward = 20
             self.game.player.eat()
             self.game._reset_food()
         elif not self.game.player.is_alive:
@@ -157,7 +157,7 @@ class SnakeEnv(gym.Env):
         else:
             # Reward for getting closer to food, penalize for moving away
             if prev_dist is not None:
-                reward += 0.1 * (prev_dist - curr_dist) / (max_distance + 1e-8)
+                reward += 0.01 * (prev_dist - curr_dist) / (max_distance + 1e-8)
 
         truncated = self.current_step >= self.max_steps
 
