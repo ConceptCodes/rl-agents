@@ -199,25 +199,30 @@ class Game:
                         x, y = self.grid_coords[c][r]
                         top_piece.set_position(x, y)
                         top_piece.render(self.screen)
+                        if len(stack) > 1:
+                            self._render_stack_badge(c, r, len(stack), top_piece)
 
-            self._render_turn_indicator()
             pygame.display.flip()
-
-    def _render_turn_indicator(self):
-        try:
-            label = "Black" if self.turn.color == BLACK else "White"
-            text = f"Turn: {label}"
-            color = WHITE if self.turn.color == BLACK else BLACK
-            text_surf = font.render(text, True, color)
-            self.screen.blit(text_surf, (8, 8))
-        except Exception:
-            pass
 
     def _draw_borders(self):
         for col in range(BOARD_SIZE):
             for row in range(BOARD_SIZE):
                 rect = self.grid_rects[col][row]
                 pygame.draw.rect(self.screen, BORDER_COLOR, rect, 1)
+
+    def _render_stack_badge(self, col: int, row: int, count: int, top_piece: Piece):
+        try:
+            rect = self.grid_rects[col][row]
+            badge_r = max(8, rect.width // 12)
+            badge_x = rect.right - badge_r - 4
+            badge_y = rect.top + badge_r + 4
+            opposite_color = WHITE if top_piece.color == BLACK else BLACK
+            font_small = pygame.font.SysFont("Arial", 18)
+            num_surf = font_small.render(str(count), True, opposite_color)
+            num_rect = num_surf.get_rect(center=(badge_x, badge_y))
+            self.screen.blit(num_surf, num_rect)
+        except Exception:
+            pass
 
     def handle_setup_move(self, piece, row, col):
         if self.game_phase != "initial_setup":
