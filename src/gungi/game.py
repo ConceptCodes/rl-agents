@@ -91,6 +91,7 @@ class Player:
         self.pieces = self._init_pieces()
         self.hand_pieces = self.pieces.copy()
         self.setup_done = False
+        self.is_in_check = False
 
     def _init_pieces(self) -> list[Piece]:
         pieces = []
@@ -130,6 +131,10 @@ class Game:
         if self.render_ui:
             self.screen = pygame.display.set_mode((WIDTH, HEIGHT))
             pygame.display.set_caption(title)
+            self._board_surface = pygame.Surface((WIDTH, HEIGHT)).convert()
+            self._board_surface.fill(BOARD_COLOR)
+            self._draw_borders()
+            self._font_small = pygame.font.SysFont("Arial", 18)
 
     def _init_board(self):
         return [[[] for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
@@ -189,8 +194,7 @@ class Game:
 
     def _render(self):
         if self.render_ui:
-            self.screen.fill(BOARD_COLOR)
-            self._draw_borders()
+            self.screen.blit(self._board_surface, (0, 0))
             for r in range(BOARD_SIZE):
                 for c in range(BOARD_SIZE):
                     stack = self.board[c][r]
@@ -205,10 +209,15 @@ class Game:
             pygame.display.flip()
 
     def _draw_borders(self):
+        target = (
+            getattr(self, "_board_surface", None)
+            if hasattr(self, "_board_surface")
+            else self.screen
+        )
         for col in range(BOARD_SIZE):
             for row in range(BOARD_SIZE):
                 rect = self.grid_rects[col][row]
-                pygame.draw.rect(self.screen, BORDER_COLOR, rect, 1)
+                pygame.draw.rect(target, BORDER_COLOR, rect, 1)
 
     def _render_stack_badge(self, col: int, row: int, count: int, top_piece: Piece):
         try:
@@ -217,7 +226,7 @@ class Game:
             badge_x = rect.right - badge_r - 4
             badge_y = rect.top + badge_r + 4
             opposite_color = WHITE if top_piece.color == BLACK else BLACK
-            font_small = pygame.font.SysFont("Arial", 18)
+            font_small = getattr(self, "_font_small", pygame.font.SysFont("Arial", 18))
             num_surf = font_small.render(str(count), True, opposite_color)
             num_rect = num_surf.get_rect(center=(badge_x, badge_y))
             self.screen.blit(num_surf, num_rect)
@@ -239,6 +248,10 @@ class Game:
         stack = self.board[col][row]
         if len(stack) >= 3:
             return False
+
+        if piece.name == "MARSHAL" and len(stack) > 0:
+            return False
+
         if stack and stack[-1].name == "MARSHAL":
             return False
 
@@ -273,6 +286,17 @@ class Game:
                             if piece:
                                 self._selected_piece = piece
                                 self._waiting_for_click = True
+                        elif event.key == pygame.K_RETURN:
+                            self.turn.setup_done = True
+                            self._selected_piece = None
+                            self._waiting_for_click = False
+                            print(
+                                f"{'Black' if self.turn.color == BLACK else 'White'} done with setup."
+                            )
+                            print(
+                                f"{'Black' if self.turn.color == BLACK else 'White'} pieces in hand: {len(self.turn.hand_pieces)}"
+                            )
+                            self._switch_turn()
                     elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                         if self._waiting_for_click and self._selected_piece:
                             mouse_x, mouse_y = event.pos
@@ -286,13 +310,8 @@ class Game:
                                 self._waiting_for_click = False
                             else:
                                 print("Invalid move, try again.")
-                    elif event.type == pygame.KEYDOWN and event.key == pygame.K_RETURN:
-                        self.turn.setup_done = True
-                        print(
-                            f"{'Black' if self.turn.color == BLACK else 'White'} done with setup."
-                        )
-                        self._switch_turn()
-
+                else:
+                    pass
             self._render()
             self.clock.tick(FPS)
         self.end()
