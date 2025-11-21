@@ -1,5 +1,7 @@
-gymnasium[atari,box2d,classic_control,robotics,mujoco]
+gymnasium[atari,box2d,classic_control,mujoco]
 swig
 pygame
-numpy
+numpy<2
 tensorboard
+pufferlib>=0.7.3
+torch

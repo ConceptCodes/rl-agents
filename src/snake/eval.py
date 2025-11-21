@@ -1,67 +1,110 @@
-import numpy as np
-import pygame
+import argparse
+from pathlib import Path
+
+import torch
+
 from env import SnakeEnv
-import sys
-import os
+from train import SnakePolicy
 
 
-def discretize(obs, bins):
-    bin_ranges = [
-        np.linspace(-800, 800, bins[0]),
-        np.linspace(-600, 600, bins[1]),
-        np.linspace(0, 800, bins[2]),
-        np.linspace(0, 600, bins[3]),
-        np.linspace(0, 800, bins[4]),
-        np.linspace(0, 600, bins[5]),
-        np.linspace(0, 3, bins[6]),
-    ]
-    return tuple(np.digitize(o, r) for o, r in zip(obs, bin_ranges))
+def load_checkpoint(policy: SnakePolicy, checkpoint_path: Path, device: torch.device):
+    checkpoint = torch.load(checkpoint_path, map_location=device)
+    state_dict = checkpoint.get("model", checkpoint)
+    policy.load_state_dict(state_dict)
+    return checkpoint
+
+
+def run_episode(env: SnakeEnv, policy: SnakePolicy, device: torch.device, greedy: bool):
+    obs, _ = env.reset()
+    done = False
+    total_reward = 0.0
+
+    while not done:
+        obs_tensor = torch.tensor(obs, dtype=torch.float32, device=device).unsqueeze(0)
+        with torch.no_grad():
+            logits, _ = policy(obs_tensor)
+            if greedy:
+                action = torch.argmax(logits, dim=-1).item()
+            else:
+                dist = torch.distributions.Categorical(logits=logits)
+                action = dist.sample().item()
+        obs, reward, terminated, truncated, _ = env.step(action)
+        if env.render_mode == "human":
+            env.render()
+        total_reward += reward
+        done = terminated or truncated
+    return total_reward
+
+
+def _resolve_device(device_option: str) -> torch.device:
+    device_option = device_option.lower()
+
+    def mps_available():
+        return hasattr(torch.backends, "mps") and torch.backends.mps.is_available()
+
+    if device_option == "cpu":
+        return torch.device("cpu")
+    if device_option == "cuda":
+        if torch.cuda.is_available():
+            return torch.device("cuda")
+        raise RuntimeError("CUDA requested but not available")
+    if device_option == "mps":
+        if mps_available():
+            return torch.device("mps")
+        raise RuntimeError("MPS requested but not available")
+
+    # auto
+    if torch.cuda.is_available():
+        return torch.device("cuda")
+    if mps_available():
+        return torch.device("mps")
+    return torch.device("cpu")
+
+
+def parse_args():
+    parser = argparse.ArgumentParser(description="Evaluate Snake PPO checkpoint")
+    parser.add_argument(
+        "checkpoint",
+        type=Path,
+        help="Path to checkpoint produced by train.py",
+    )
+    parser.add_argument(
+        "--episodes", type=int, default=3, help="Number of rendered evaluation episodes"
+    )
+    parser.add_argument(
+        "--device",
+        type=str,
+        default="auto",
+        choices=["auto", "cpu", "cuda", "mps"],
+        help="Device to run policy on",
+    )
+    parser.add_argument(
+        "--greedy",
+        action="store_true",
+        help="Use argmax policy instead of sampling",
+    )
+    parser.add_argument(
+        "--no-render",
+        action="store_true",
+        help="Disable windowed rendering (useful for headless validation)",
+    )
+    return parser.parse_args()
 
 
 def main():
-    model_dir = "src/snake/models"
-    q_files = [
-        f
-        for f in os.listdir(model_dir)
-        if f.startswith("q_table_ep") and f.endswith(".npy")
-    ]
-    if not q_files:
-        print("No Q-table found in models directory.")
-        sys.exit(1)
-    latest = sorted(q_files, key=lambda x: int(x.split("ep")[-1].split(".")[0]))[-1]
-    q_path = os.path.join(model_dir, latest)
-    print(f"Loading Q-table: {q_path}")
-    q_table = np.load(q_path, allow_pickle=True).item()
+    args = parse_args()
+    device = _resolve_device(args.device)
+    render_mode = None if args.no_render else "human"
 
-    bins = [10, 10, 8, 8, 8, 8, 4]
-    env = SnakeEnv(render_mode="human")
-    num_episodes = 10
-    total_rewards = []
-    for episode in range(num_episodes):
-        obs, info = env.reset()
-        state = discretize(obs, bins)
-        done = False
-        total_reward = 0
-        steps = 0
-        while not done:
-            if state in q_table:
-                action = np.argmax(q_table[state])
-            else:
-                action = env.action_space.sample()
-            obs, reward, terminated, truncated, info = env.step(action)
-            env.render()
-            pygame.event.pump()
-            state = discretize(obs, bins)
-            total_reward += reward
-            steps += 1
-            done = terminated or truncated
-        total_rewards.append(total_reward)
-        print(
-            f"Episode {episode+1}: Total Reward = {total_reward:.2f}, Steps = {steps}"
-        )
+    env = SnakeEnv(render_mode=render_mode)
+    policy = SnakePolicy(env).to(device)
+    load_checkpoint(policy, args.checkpoint, device)
+    policy.eval()
+
+    for episode in range(1, args.episodes + 1):
+        reward = run_episode(env, policy, device, greedy=args.greedy)
+        print(f"Episode {episode}: reward={reward:.2f}")
+
     env.close()
-    print(f"Average Reward over {num_episodes} episodes: {np.mean(total_rewards):.2f}")
-
-
 if __name__ == "__main__":
     main()

@@ -1,35 +1,37 @@
 # Snake RL Agent
 
-This is a reinforcement learning agent for playing Snake using the Gymnasium library.
+This module includes both a simple Q-learning baseline and a PufferLib-powered PPO trainer for the custom Snake environment.
 
+## Setup
 
-### Observations 
-put a table here
-
-### Actions
-The agent can perform the following actions:
-
-### RL Algorithm
-The agent is trained using a Q-learning algorithm (DQN). We're using epsilon-greedy policy for action selection. As well as building a q table to store the Q-values for each state-action pair.
-
-## Installation
-
-To install the required dependencies, run:
+From the repo root install dependencies via:
 
 ```bash
-pip install -r requirements.txt
+uv sync
 ```
 
-## Usage
+## Training Options
 
-To train the agent, run:
+- **Tabular baseline**: `uv run python src/snake/train_tabular.py`
+- **PufferLib PPO** (vectorized envs, CUDA/MPS aware):
+
+  ```bash
+  uv run python src/snake/train.py --num-envs 32 --num-workers 8 --device auto
+  ```
+
+  Useful flags:
+  - `--checkpoint-dir` and `--save-interval` control automatic checkpointing.
+  - `--backend` selects the vector backend (`serial`, `multiprocessing`, optional `ray`).
+  - `--render` opens the UI for the driver environment (slower but good for debugging).
+
+## Evaluating a PPO Checkpoint
+
+After training, evaluate a saved policy in a rendered window:
 
 ```bash
-python src/snake/train.py
+uv run python src/snake/eval.py checkpoints/snake/snake_ppo_update_400.pt --episodes 5
 ```
 
-To evaluate the agent, run:
+Add `--greedy` for deterministic play or `--no-render` for headless validation.
 
-```bash
-python src/snake/evaluate.py
-```
+For the legacy Q-learning artifacts use `train_tabular.py`/`eval_tabular.py`.

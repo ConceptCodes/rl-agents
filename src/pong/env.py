@@ -214,3 +214,16 @@ class PongEnv(gym.Env):
         """Clean up resources."""
         if self.render_mode == "human":
             pygame.quit()
+
+
+def make_puffer_pong_env(render: bool = False, buf=None):
+    """Return a PufferLib-compatible wrapper around :class:`PongEnv`."""
+    try:
+        import pufferlib.emulation
+    except ImportError as exc:
+        raise RuntimeError(
+            "pufferlib must be installed to build the Puffer Pong environment"
+        ) from exc
+
+    base_env = PongEnv(render_mode="human" if render else None)
+    return pufferlib.emulation.GymnasiumPufferEnv(base_env, buf=buf)
