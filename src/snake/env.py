@@ -122,7 +122,8 @@ class SnakeEnv(gym.Env):
         Returns:
             tuple: (observation, reward, terminated, truncated, info)
         """
-        if self.render_mode == "human": self.clock.tick(FPS)
+        if self.render_mode == "human":
+            self.clock.tick(FPS)
         self.current_step += 1
 
         action_map = {0: "up", 1: "down", 2: "left", 3: "right"}
@@ -131,35 +132,20 @@ class SnakeEnv(gym.Env):
         self.game._handle_input(direction)
         self.game.player.move()
 
-        prev_dist = getattr(self, "_prev_norm_dist", None)
-        curr_dist = self._normalized_distance()
-        self._prev_norm_dist = curr_dist
-
-        reward = -0.02  # base step penalty
+        reward = -0.01  # Small per-step penalty to encourage efficiency
         terminated = False
 
-        # Distance shaping normalized by grid extents
-        if prev_dist is not None:
-            reward += 0.1 * (prev_dist - curr_dist)
-
-        # Encourage heading alignment toward food
-        reward += 0.05 * self._velocity_alignment()
-
-        # Encourage leaving room for the next move
-        if self._next_move_safe():
-            reward += 0.01
-        else:
-            reward -= 0.05
-
+        # Check for food collision FIRST (before death check)
         if self.game._collision_check():
-            reward = 15.0  # symmetric terminal reward
+            reward = 10.0  # Large reward for eating food
             self.game.player.eat()
             self.game._reset_food()
-            self._prev_norm_dist = None
-        elif not self.game.player.is_alive:
-            reward = -15.0
+
+        # Check for death (only if food wasn't eaten)
+        if not self.game.player.is_alive:
+            reward = -10.0  # Large penalty for dying
             terminated = True
-        
+
         truncated = self.current_step >= self.max_steps
 
         obs = self._get_obs()
