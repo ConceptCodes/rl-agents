@@ -40,6 +40,9 @@ class PongEnv(gym.Env):
             color=GREEN,
         )
         self.ball = Ball(WIDTH // 2, HEIGHT // 2, 7, 7, WHITE)
+        self._ball_in_contact = (
+            False  # Track ball contact to prevent multiple rewards per hit
+        )
 
         # Define observation space: [ball_x, ball_y, ball_vel_x, ball_vel_y, player1_y, player2_y]
         self.observation_space = gym.spaces.Box(
@@ -104,6 +107,7 @@ class PongEnv(gym.Env):
         self.player_1.rect.y = HEIGHT // 2 - 50
         self.player_2.rect.y = HEIGHT // 2 - 50
         self.ball.reset()
+        self._ball_in_contact = False
 
         # Simple AI for player 2 (opponent)
         self._simple_ai_enabled = True
@@ -161,29 +165,27 @@ class PongEnv(gym.Env):
         if point_scored == 1:  # Player 2 (opponent) scored
             reward = -10
             terminated = True
+            self._ball_in_contact = False
         elif point_scored == -1:  # Player 1 (agent) scored
             reward = 10
             terminated = True
+            self._ball_in_contact = False
         else:
-            # Small reward for hitting the ball
-            if self.ball.get_rect().colliderect(self.player_1.rect):
+            # Award +1 reward only once per ball contact
+            is_colliding = self.ball.get_rect().colliderect(self.player_1.rect)
+            if is_colliding and not self._ball_in_contact:
                 reward = 1
-            # Small penalty for being far from ball
-            distance_penalty = (
-                abs(
-                    self.ball.pos.y
-                    - (self.player_1.rect.y + self.player_1.rect.height // 2)
-                )
-                / HEIGHT
-            )
-            reward -= 0.01 * distance_penalty
+                self._ball_in_contact = True
+            elif not is_colliding:
+                self._ball_in_contact = False
 
         # Check if episode should truncate (max steps reached)
         truncated = self.current_step >= self.max_steps
 
-        # Reset ball if point was scored but don't end episode yet
+        # Reset ball if point was scored
         if point_scored != 0:
             self.ball.reset()
+            self._ball_in_contact = False
 
         observation = self._get_obs()
         info = self._get_info()
