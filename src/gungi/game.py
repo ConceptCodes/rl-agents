@@ -337,7 +337,9 @@ class Game:
         if not self._legal_moves:
             print("No legal moves for", top.name)
 
-    def _matching_move(self, target: tuple[int, int], moves: list[Move]) -> Optional[Move]:
+    def _matching_move(
+        self, target: tuple[int, int], moves: list[Move]
+    ) -> Optional[Move]:
         for move in moves:
             if move.to == target:
                 return move
@@ -552,7 +554,9 @@ class Game:
                 return idx
         return None
 
-    def _remove_hand_piece(self, player: Player, canonical_piece: str) -> Optional[Piece]:
+    def _remove_hand_piece(
+        self, player: Player, canonical_piece: str
+    ) -> Optional[Piece]:
         for idx, piece in enumerate(player.hand_pieces):
             if canonical_name(piece.name) == canonical_piece:
                 return player.hand_pieces.pop(idx)
@@ -667,6 +671,229 @@ class Game:
             self._render()
             self.clock.tick(FPS)
         self.end()
+
+    # =============================================================================
+    # Methods for AlphaZero integration
+    # =============================================================================
+
+    def copy(self) -> "Game":
+        """
+        Create a deep copy of the game state for MCTS simulation.
+
+        Returns:
+            Game: A new Game instance with copied state
+        """
+        import copy as copy_module
+
+        # Create new game without UI
+        new_game = Game(render_ui=False)
+
+        # Copy board state (deep copy each stack)
+        new_game.board = [[[] for _ in range(BOARD_SIZE)] for _ in range(BOARD_SIZE)]
+        for col in range(BOARD_SIZE):
+            for row in range(BOARD_SIZE):
+                for piece in self.board[col][row]:
+                    new_piece = Piece(piece.name, piece.color)
+                    new_game.board[col][row].append(new_piece)
+
+        # Copy players
+        new_game.player_1 = Player(BLACK)
+        new_game.player_1.hand_pieces = []
+        for piece in self.player_1.hand_pieces:
+            new_game.player_1.hand_pieces.append(Piece(piece.name, piece.color))
+        new_game.player_1.setup_done = self.player_1.setup_done
+        new_game.player_1.is_in_check = self.player_1.is_in_check
+
+        new_game.player_2 = Player(WHITE)
+        new_game.player_2.hand_pieces = []
+        for piece in self.player_2.hand_pieces:
+            new_game.player_2.hand_pieces.append(Piece(piece.name, piece.color))
+        new_game.player_2.setup_done = self.player_2.setup_done
+        new_game.player_2.is_in_check = self.player_2.is_in_check
+
+        # Copy turn
+        new_game.turn = (
+            new_game.player_1 if self.turn == self.player_1 else new_game.player_2
+        )
+
+        # Copy game phase and other state
+        new_game.game_phase = self.game_phase
+        new_game.setup_moves_made = self.setup_moves_made
+        new_game._terminal = getattr(self, "_terminal", False)
+        new_game._result = getattr(self, "_result", 0.0)
+        new_game._move_count = getattr(self, "_move_count", 0)
+
+        return new_game
+
+    def is_terminal(self) -> bool:
+        """
+        Check if the game has ended.
+
+        Returns:
+            bool: True if game is over
+        """
+        if hasattr(self, "_terminal") and self._terminal:
+            return True
+
+        # Check if Marshal is captured (game over)
+        p1_has_marshal = any(
+            piece.name == "MARSHAL" for piece in self.player_1.hand_pieces
+        ) or any(
+            any(piece.name == "MARSHAL" and piece.color == BLACK for piece in stack)
+            for row in self.board
+            for stack in row
+        )
+
+        p2_has_marshal = any(
+            piece.name == "MARSHAL" for piece in self.player_2.hand_pieces
+        ) or any(
+            any(piece.name == "MARSHAL" and piece.color == WHITE for piece in stack)
+            for row in self.board
+            for stack in row
+        )
+
+        # Check if either player's Marshal is on the board
+        p1_marshal_on_board = any(
+            any(piece.name == "MARSHAL" and piece.color == BLACK for piece in stack)
+            for row in self.board
+            for stack in row
+        )
+        p2_marshal_on_board = any(
+            any(piece.name == "MARSHAL" and piece.color == WHITE for piece in stack)
+            for row in self.board
+            for stack in row
+        )
+
+        # Game ends if a Marshal is captured (not on board and not in original hand)
+        if self.game_phase == "game":
+            if not p1_marshal_on_board:
+                self._terminal = True
+                self._result = -1.0  # White wins
+                return True
+            if not p2_marshal_on_board:
+                self._terminal = True
+                self._result = 1.0  # Black wins
+                return True
+
+        return False
+
+    def get_result(self) -> float:
+        """
+        Get the game result from Black's perspective.
+
+        Returns:
+            float: +1.0 for Black win, -1.0 for White win, 0.0 for draw/ongoing
+        """
+        if hasattr(self, "_result"):
+            return self._result
+
+        # Check terminal state
+        self.is_terminal()
+
+        return getattr(self, "_result", 0.0)
+
+    def apply_action(self, action_idx: int) -> bool:
+        """
+        Apply an action by its index (for MCTS).
+
+        Args:
+            action_idx: Action index from encoding
+
+        Returns:
+            bool: True if action was applied successfully
+        """
+        from encoding import decode_action, action_to_move
+        from utils.moves import generate_legal_moves, Ruleset
+
+        decoded = decode_action(action_idx)
+
+        if decoded["type"] == "setup":
+            # Setup phase action
+            piece_name = decoded["piece"]
+            dst = decoded["dst"]
+
+            piece = next(
+                (p for p in self.turn.hand_pieces if p.name == piece_name), None
+            )
+            if piece is None:
+                return False
+
+            row, col = dst[1], dst[0]
+            return self.handle_setup_move(piece, row, col)
+
+        elif decoded["type"] == "drop":
+            # Drop action
+            piece_name = decoded["piece"]
+            dst = decoded["dst"]
+
+            piece = next(
+                (p for p in self.turn.hand_pieces if p.name == piece_name), None
+            )
+            if piece is None:
+                return False
+
+            # Check if drop is legal
+            rules = Ruleset(board_size=BOARD_SIZE, hand=self.turn.hand_pieces)
+            from utils.moves import generate_hand_drops
+
+            drop_moves = generate_hand_drops(
+                piece_name, self.turn.color, self.board, rules
+            )
+
+            if not any(m.to == dst for m in drop_moves):
+                return False
+
+            # Apply drop
+            self.turn.hand_pieces.remove(piece)
+            self.board[dst[0]][dst[1]].append(piece)
+            self._switch_turn()
+            self._increment_move_count()
+            return True
+
+        else:  # move
+            src = decoded["src"]
+            dst = decoded["dst"]
+
+            stack = self.board[src[0]][src[1]]
+            if not stack:
+                return False
+
+            piece = stack[-1]
+            if piece.color != self.turn.color:
+                return False
+
+            # Find legal move
+            rules = Ruleset(board_size=BOARD_SIZE, hand=self.turn.hand_pieces)
+            legal_moves = generate_legal_moves(piece, src, self.board, rules)
+
+            move = next((m for m in legal_moves if m.to == dst), None)
+            if move is None:
+                return False
+
+            # Apply the move
+            if move.action in {"move", "stack"}:
+                self._move_piece(src, dst)
+            elif move.action == "capture":
+                self._apply_capture(move)
+            elif move.action == "turncoat":
+                # For turncoat, just capture (simplified for MCTS)
+                self._apply_capture(move)
+
+            self._switch_turn()
+            self._increment_move_count()
+            self.is_terminal()  # Update terminal state
+            return True
+
+    def _increment_move_count(self):
+        """Increment the move counter."""
+        if not hasattr(self, "_move_count"):
+            self._move_count = 0
+        self._move_count += 1
+
+    @property
+    def move_count(self) -> int:
+        """Get current move count."""
+        return getattr(self, "_move_count", 0)
 
 
 if __name__ == "__main__":

@@ -7,7 +7,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import pufferlib
-import pufferlib.pytorch  # registers layer_init helper
+import pufferlib.pytorch
 import pufferlib.vector
 
 from env import make_puffer_snake_env

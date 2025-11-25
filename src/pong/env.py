@@ -158,11 +158,11 @@ class PongEnv(gym.Env):
         reward = 0
         terminated = False
 
-        if point_scored == 1:  # Player 1 (agent) scored
-            reward = 10
-            terminated = True
-        elif point_scored == -1:  # Player 2 (opponent) scored
+        if point_scored == 1:  # Player 2 (opponent) scored
             reward = -10
+            terminated = True
+        elif point_scored == -1:  # Player 1 (agent) scored
+            reward = 10
             terminated = True
         else:
             # Small reward for hitting the ball

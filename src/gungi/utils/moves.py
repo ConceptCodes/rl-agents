@@ -3,7 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import Any, Optional, Sequence, Tuple
 
-from ..constants import BOARD_SIZE, BLACK, WHITE
+from constants import BOARD_SIZE, BLACK, WHITE
 
 BoardPos = Tuple[int, int]
 StepVector = Tuple[int, int, int]
@@ -260,7 +260,9 @@ PIECE_ROUTER = {
 }
 
 
-def _add_scaled_steps(piece, src: BoardPos, board, steps: list[StepVector], rules: Ruleset) -> list[Move]:
+def _add_scaled_steps(
+    piece, src: BoardPos, board, steps: list[StepVector], rules: Ruleset
+) -> list[Move]:
     moves: list[Move] = []
     moving_height = _height(board, src, rules.board_size)
     if moving_height == 0:
@@ -280,7 +282,9 @@ def _add_scaled_steps(piece, src: BoardPos, board, steps: list[StepVector], rule
     return moves
 
 
-def _add_rays(piece, src: BoardPos, board, directions: tuple[RayVector, ...], rules: Ruleset) -> list[Move]:
+def _add_rays(
+    piece, src: BoardPos, board, directions: tuple[RayVector, ...], rules: Ruleset
+) -> list[Move]:
     moves: list[Move] = []
     moving_height = _height(board, src, rules.board_size)
     for dx, dy in directions:
@@ -366,7 +370,9 @@ def _eval_dst(
     return Move(piece=canonical_piece, frm=src, to=dst, action="capture")
 
 
-def _captain_turncoat_moves(piece, base_moves: list[Move], board, rules: Ruleset) -> list[Move]:
+def _captain_turncoat_moves(
+    piece, base_moves: list[Move], board, rules: Ruleset
+) -> list[Move]:
     hand_names = _hand_canonical_names(rules.hand)
     if not hand_names:
         return []

@@ -14,3 +14,13 @@ build/
 *.coverage  
 
 *.npy
+
+# Model checkpoints
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+
+# TensorBoard events
+events.out.*
+tfevents.*

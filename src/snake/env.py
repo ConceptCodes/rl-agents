@@ -122,7 +122,7 @@ class SnakeEnv(gym.Env):
         Returns:
             tuple: (observation, reward, terminated, truncated, info)
         """
-        self.clock.tick(FPS)
+        if self.render_mode == "human": self.clock.tick(FPS)
         self.current_step += 1
 
         action_map = {0: "up", 1: "down", 2: "left", 3: "right"}

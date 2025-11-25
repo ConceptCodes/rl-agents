@@ -5,6 +5,7 @@ this repository contains various reinforcement learning agents implemented in Py
 ## Modules
 - [**Snake**](src/snake): A reinforcement learning agent for playing the Snake game using the Gymnasium library.
 - [**Pong**](src/pong): A reinforcement learning agent for playing the Pong game using the Gymnasium library.
+- [**Gungi**](src/gungi): A reinforcement learning agent for playing Gungi, a strategic board game from the "Hunter x Hunter" universe.
 
 ## Development with `uv`
 This repository now uses [uv](https://docs.astral.sh/uv/) for environment management and dependency locking.

@@ -1,218 +1,251 @@
 #!/usr/bin/env python3
+"""Tabular Q-learning training script for Pong."""
+
+import argparse
+import pickle
+from collections import defaultdict
+from pathlib import Path
 
 import numpy as np
+import pygame
+
 from env import PongEnv
-import random
 
 
-class SimpleQAgent:
-    """A simple Q-learning agent."""
+class PongQAgent:
+    """Q-learning agent with discretized state space for Pong."""
 
     def __init__(
-        self, action_space_size, learning_rate=0.1, epsilon=0.1, discount=0.95
+        self,
+        action_space_size: int,
+        learning_rate: float = 0.1,
+        discount: float = 0.95,
+        epsilon: float = 1.0,
+        epsilon_min: float = 0.01,
+        epsilon_decay: float = 0.995,
     ):
         self.action_space_size = action_space_size
         self.learning_rate = learning_rate
-        self.epsilon = epsilon
         self.discount = discount
+        self.epsilon = epsilon
+        self.epsilon_min = epsilon_min
+        self.epsilon_decay = epsilon_decay
 
-        # Simple state discretization for Q-table
-        self.q_table = {}
+        self.q_table: dict = defaultdict(lambda: np.zeros(action_space_size))
 
-    def discretize_state(self, observation):
-        """Convert continuous observation to discrete state for Q-table."""
-        ball_x, ball_y, ball_vx, ball_vy, player1_y, player2_y = observation
+    def discretize_state(self, obs: np.ndarray) -> tuple:
+        """Convert continuous observation to discrete state tuple.
 
-        # Discretize positions into bins
+        obs: [ball_x, ball_y, ball_vel_x, ball_vel_y, player1_y, player2_y]
+        """
+        ball_x, ball_y, ball_vx, ball_vy, player1_y, player2_y = obs
+
+        # Discretize into bins
         ball_x_bin = int(ball_x // 50)
         ball_y_bin = int(ball_y // 50)
-        ball_vx_bin = 1 if ball_vx > 0 else 0  # Ball moving left or right
+        ball_vx_bin = 1 if ball_vx > 0 else 0  # Ball moving right or left
+        ball_vy_bin = 1 if ball_vy > 0 else 0  # Ball moving down or up
         player1_y_bin = int(player1_y // 50)
 
-        return (ball_x_bin, ball_y_bin, ball_vx_bin, player1_y_bin)
+        return (ball_x_bin, ball_y_bin, ball_vx_bin, ball_vy_bin, player1_y_bin)
 
-    def get_action(self, state):
+    def get_action(self, state: tuple) -> int:
         """Choose action using epsilon-greedy policy."""
-        if random.random() < self.epsilon:
-            return random.randint(0, self.action_space_size - 1)
+        if np.random.random() < self.epsilon:
+            return np.random.randint(0, self.action_space_size)
+        return int(np.argmax(self.q_table[state]))
 
-        if state not in self.q_table:
-            self.q_table[state] = [0.0] * self.action_space_size
+    def update(
+        self,
+        state: tuple,
+        action: int,
+        reward: float,
+        next_state: tuple,
+        done: bool,
+    ):
+        """Update Q-value using Q-learning update rule."""
+        if done:
+            target = reward
+        else:
+            target = reward + self.discount * np.max(self.q_table[next_state])
 
-        return np.argmax(self.q_table[state])
-
-    def update(self, state, action, reward, next_state):
-        """Update Q-values using Q-learning update rule."""
-        if state not in self.q_table:
-            self.q_table[state] = [0.0] * self.action_space_size
-
-        if next_state not in self.q_table:
-            self.q_table[next_state] = [0.0] * self.action_space_size
-
-        # Q-learning update
-        best_next_action = np.argmax(self.q_table[next_state])
-        td_target = reward + self.discount * self.q_table[next_state][best_next_action]
-        td_error = td_target - self.q_table[state][action]
+        td_error = target - self.q_table[state][action]
         self.q_table[state][action] += self.learning_rate * td_error
 
+    def decay_epsilon(self):
+        """Decay exploration rate."""
+        self.epsilon = max(self.epsilon * self.epsilon_decay, self.epsilon_min)
 
-def train_agent(episodes=1000, render=False):
-    """Train the agent on the Pong environment."""
-    env = PongEnv(render_mode="human" if render else None, max_steps=1000)
-    agent = SimpleQAgent(action_space_size=env.action_space.n)
+    def save(self, path: str):
+        """Save Q-table to file."""
+        with open(path, "wb") as f:
+            pickle.dump(dict(self.q_table), f)
+        print(f"Saved Q-table to {path}")
+
+    def load(self, path: str):
+        """Load Q-table from file."""
+        with open(path, "rb") as f:
+            loaded = pickle.load(f)
+        self.q_table = defaultdict(lambda: np.zeros(self.action_space_size), loaded)
+        print(f"Loaded Q-table from {path}")
+
+
+def train_agent(
+    episodes: int = 1000,
+    render: bool = False,
+    save_interval: int = 500,
+    save_dir: str = "src/pong/models",
+    learning_rate: float = 0.1,
+    discount: float = 0.95,
+    epsilon: float = 1.0,
+    epsilon_min: float = 0.01,
+    epsilon_decay: float = 0.995,
+):
+    """Train the Q-learning agent on the Pong environment."""
+    env = PongEnv(render_mode="human" if render else None)
+    agent = PongQAgent(
+        action_space_size=env.action_space.n,
+        learning_rate=learning_rate,
+        discount=discount,
+        epsilon=epsilon,
+        epsilon_min=epsilon_min,
+        epsilon_decay=epsilon_decay,
+    )
+
+    save_path = Path(save_dir)
+    save_path.mkdir(parents=True, exist_ok=True)
 
     episode_rewards = []
-    training_interrupted = False
+    episode_lengths = []
 
-    print(f"Training for {episodes} episodes...")
+    print(f"Training Pong Q-learning agent for {episodes} episodes...")
     if render:
-        print("Close the pygame window to stop training early.")
+        print("Rendering enabled. Close the pygame window to stop early.")
 
     for episode in range(episodes):
-        observation, info = env.reset()
-        state = agent.discretize_state(observation)
+        obs, _ = env.reset()
+        state = agent.discretize_state(obs)
 
-        total_reward = 0
-        step_count = 0
+        total_reward = 0.0
+        steps = 0
+        done = False
 
-        while True:
-            # Handle pygame events if rendering
+        while not done:
             if render:
-                import pygame
-
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
-                        training_interrupted = True
-                        break
-
-                if training_interrupted:
-                    break
+                        print(f"\nTraining interrupted at episode {episode + 1}")
+                        env.close()
+                        return agent, episode_rewards
 
             action = agent.get_action(state)
-            next_observation, reward, terminated, truncated, info = env.step(action)
-            next_state = agent.discretize_state(next_observation)
+            next_obs, reward, terminated, truncated, _ = env.step(action)
+            next_state = agent.discretize_state(next_obs)
+            done = terminated or truncated
 
-            # Update agent
-            agent.update(state, action, reward, next_state)
+            agent.update(state, action, reward, next_state, done)
 
-            total_reward += reward
-            step_count += 1
             state = next_state
+            total_reward += reward
+            steps += 1
 
             if render:
                 env.render()
 
-            if terminated or truncated:
-                break
-
-        if training_interrupted:
-            print(f"\nTraining interrupted by user at episode {episode + 1}")
-            break
-
+        agent.decay_epsilon()
         episode_rewards.append(total_reward)
+        episode_lengths.append(steps)
 
-        # Decay epsilon for exploration
-        if agent.epsilon > 0.01:
-            agent.epsilon *= 0.995
-
-        # Print progress
-        if (episode + 1) % 10 == 0:  # More frequent updates for visual training
-            avg_reward = (
-                np.mean(episode_rewards[-10:])
-                if len(episode_rewards) >= 10
-                else np.mean(episode_rewards)
-            )
+        # Logging every 10 episodes
+        if (episode + 1) % 10 == 0:
+            avg_reward = np.mean(episode_rewards[-10:])
+            avg_length = np.mean(episode_lengths[-10:])
             print(
-                f"Episode {episode + 1}: Avg Reward (last 10): {avg_reward:.2f}, "
-                f"Epsilon: {agent.epsilon:.3f}, Steps: {step_count}"
+                f"Episode {episode + 1:5d} | "
+                f"Avg Reward: {avg_reward:8.2f} | "
+                f"Avg Steps: {avg_length:6.1f} | "
+                f"Epsilon: {agent.epsilon:.3f}"
             )
+
+        # Checkpoint saving
+        if (episode + 1) % save_interval == 0:
+            ckpt_path = save_path / f"q_table_ep{episode + 1}.pkl"
+            agent.save(str(ckpt_path))
+
+    # Save final model
+    final_path = save_path / "q_table_final.pkl"
+    agent.save(str(final_path))
 
     env.close()
     return agent, episode_rewards
 
 
-def test_trained_agent(agent, episodes=5):
-    """Test the trained agent with rendering."""
-    env = PongEnv(render_mode="human", max_steps=1000)
-
-    print(f"Testing trained agent for {episodes} episodes...")
-
-    for episode in range(episodes):
-        observation, info = env.reset()
-        state = agent.discretize_state(observation)
-
-        total_reward = 0
-        step_count = 0
-
-        # Use greedy policy (no exploration)
-        agent.epsilon = 0
-
-        while True:
-            action = agent.get_action(state)
-            observation, reward, terminated, truncated, info = env.step(action)
-            state = agent.discretize_state(observation)
-
-            total_reward += reward
-            step_count += 1
-
-            env.render()
-
-            if terminated or truncated:
-                break
-
-        print(
-            f"Test Episode {episode + 1}: Reward: {total_reward:.2f}, Steps: {step_count}"
-        )
-
-    env.close()
-
-
 def main():
-    """Main training function."""
-    print("=== Pong RL Training ===")
+    parser = argparse.ArgumentParser(description="Train Pong with Tabular Q-Learning")
+    parser.add_argument(
+        "--episodes", type=int, default=1000, help="Number of training episodes"
+    )
+    parser.add_argument(
+        "--render", action="store_true", help="Render during training (slower)"
+    )
+    parser.add_argument(
+        "--save-interval",
+        type=int,
+        default=500,
+        help="Save checkpoint every N episodes",
+    )
+    parser.add_argument(
+        "--save-dir",
+        type=str,
+        default="src/pong/models",
+        help="Directory for saving models",
+    )
+    parser.add_argument("--lr", type=float, default=0.1, help="Learning rate")
+    parser.add_argument(
+        "--discount", type=float, default=0.95, help="Discount factor (gamma)"
+    )
+    parser.add_argument(
+        "--epsilon", type=float, default=1.0, help="Initial exploration rate"
+    )
+    parser.add_argument(
+        "--epsilon-min", type=float, default=0.01, help="Minimum exploration rate"
+    )
+    parser.add_argument(
+        "--epsilon-decay", type=float, default=0.995, help="Epsilon decay per episode"
+    )
+    parser.add_argument(
+        "--load",
+        type=str,
+        default=None,
+        help="Path to load existing Q-table to continue training",
+    )
+    args = parser.parse_args()
 
-    # Ask if user wants to watch training
-    try:
-        response = (
-            input("Would you like to watch the training visually? (y/n): ")
-            .lower()
-            .strip()
+    initial_epsilon = args.epsilon
+
+    if args.load:
+        # Load existing Q-table and continue training
+        temp_agent = PongQAgent(action_space_size=3)
+        temp_agent.load(args.load)
+        initial_epsilon = (
+            temp_agent.epsilon if hasattr(temp_agent, "epsilon") else args.epsilon_min
         )
-        render_training = response == "y"
 
-        if render_training:
-            episodes = 100  # Fewer episodes for visual training
-            print("Training with visual rendering - you can watch the agent learn!")
-            print("The left paddle is controlled by the AI agent.")
-            print("Close the window to stop training early.")
-        else:
-            episodes = 500  # More episodes for faster training
-            print("Training without rendering for faster learning...")
+    agent, rewards = train_agent(
+        episodes=args.episodes,
+        render=args.render,
+        save_interval=args.save_interval,
+        save_dir=args.save_dir,
+        learning_rate=args.lr,
+        discount=args.discount,
+        epsilon=initial_epsilon,
+        epsilon_min=args.epsilon_min,
+        epsilon_decay=args.epsilon_decay,
+    )
 
-    except KeyboardInterrupt:
-        print("\nInterrupted by user.")
-        return
-
-    # Train the agent
-    agent, rewards = train_agent(episodes=episodes, render=render_training)
-
-    print(f"\nTraining completed!")
-    print(f"Final average reward (last 100 episodes): {np.mean(rewards[-100:]):.2f}")
-
-    # Test the trained agent
-    if not render_training:  # Only ask if we didn't already render during training
-        try:
-            response = (
-                input("\nWould you like to test the trained agent visually? (y/n): ")
-                .lower()
-                .strip()
-            )
-            if response == "y":
-                test_trained_agent(agent, episodes=3)
-        except KeyboardInterrupt:
-            print("\nInterrupted by user.")
-
-    print("Training session completed!")
+    print(f"\nTraining complete!")
+    if rewards:
+        print(f"Final average reward (last 100): {np.mean(rewards[-100:]):.2f}")
 
 
 if __name__ == "__main__":
