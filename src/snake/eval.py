@@ -18,16 +18,16 @@ from env import SnakeEnv
 
 
 def discretize_state(obs: np.ndarray) -> tuple:
-    """Convert continuous observation to discrete state tuple for Q-table lookup."""
+    """Convert continuous normalized observation to discrete state tuple for Q-table lookup."""
     bins = [10, 10, 8, 8, 8, 8, 4]
     bin_ranges = [
-        np.linspace(-400, 400, bins[0]),  # rel_food_x
-        np.linspace(-300, 300, bins[1]),  # rel_food_y
-        np.linspace(0, 400, bins[2]),  # food_x
-        np.linspace(0, 300, bins[3]),  # food_y
-        np.linspace(0, 400, bins[4]),  # head_x
-        np.linspace(0, 300, bins[5]),  # head_y
-        np.linspace(0, 3, bins[6]),  # direction
+        np.linspace(-1.0, 1.0, bins[0]),  # rel_food_x
+        np.linspace(-1.0, 1.0, bins[1]),  # rel_food_y
+        np.linspace(0.0, 1.0, bins[2]),   # food_x
+        np.linspace(0.0, 1.0, bins[3]),   # food_y
+        np.linspace(0.0, 1.0, bins[4]),   # head_x
+        np.linspace(0.0, 1.0, bins[5]),   # head_y
+        np.linspace(0.0, 1.0, bins[6]),   # direction
     ]
     return tuple(int(np.digitize(o, r)) for o, r in zip(obs, bin_ranges))
 

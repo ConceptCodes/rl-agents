@@ -200,7 +200,6 @@ class Game:
         if self.game_phase == "initial_setup":
             if self.player_1.setup_done and self.player_2.setup_done:
                 self.game_phase = "game"
-                print("Both players done with setup. Game phase now 'game'.")
                 return
 
             other = self.player_2 if self.turn == self.player_1 else self.player_1
@@ -216,7 +215,6 @@ class Game:
                 return
 
             self.game_phase = "game"
-            print("Both players done with setup. Game phase now 'game'.")
             return
 
         self.turn = self.player_2 if self.turn == self.player_1 else self.player_1
@@ -605,6 +603,11 @@ class Game:
         self.board[col][row].append(piece)
         self.turn.hand_pieces.remove(piece)
         self.setup_moves_made += 1
+
+        # Auto-complete setup phase for this player after placing Marshal
+        if piece.name == "MARSHAL":
+            self.turn.setup_done = True
+
         self._switch_turn()
         return True
 
@@ -775,6 +778,19 @@ class Game:
                 self._result = 1.0  # Black wins
                 return True
 
+            # Stalemate detection: if current player has no legal moves, they lose
+            from encoding import get_legal_action_indices
+
+            legal_actions = get_legal_action_indices(self)
+            if not legal_actions:
+                self._terminal = True
+                # Current player loses (has no moves)
+                if self.turn == self.player_1:
+                    self._result = -1.0  # Black has no moves, White wins
+                else:
+                    self._result = 1.0  # White has no moves, Black wins
+                return True
+
         return False
 
     def get_result(self) -> float:
@@ -807,7 +823,15 @@ class Game:
 
         decoded = decode_action(action_idx)
 
-        if decoded["type"] == "setup":
+        if decoded["type"] == "pass_setup":
+            # Pass setup action - end setup phase for current player
+            if self.game_phase != "initial_setup":
+                return False
+            self.turn.setup_done = True
+            self._switch_turn()
+            return True
+
+        elif decoded["type"] == "setup":
             # Setup phase action
             piece_name = decoded["piece"]
             dst = decoded["dst"]

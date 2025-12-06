@@ -45,11 +45,10 @@ class PongEnv(gym.Env):
         )
 
         # Define observation space: [ball_x, ball_y, ball_vel_x, ball_vel_y, player1_y, player2_y]
+        # Normalized to [-1, 1] range
         self.observation_space = gym.spaces.Box(
-            low=np.array([0, 0, -20, -20, 0, 0], dtype=np.float32),
-            high=np.array(
-                [WIDTH, HEIGHT, 20, 20, HEIGHT - 100, HEIGHT - 100], dtype=np.float32
-            ),
+            low=np.array([0.0, 0.0, -1.0, -1.0, 0.0, 0.0], dtype=np.float32),
+            high=np.array([1.0, 1.0, 1.0, 1.0, 1.0, 1.0], dtype=np.float32),
             dtype=np.float32,
         )
 
@@ -60,16 +59,28 @@ class PongEnv(gym.Env):
         """Convert internal state to observation format.
 
         Returns:
-            np.array: Observation with ball and player positions/velocities
+            np.array: Observation with ball and player positions/velocities (normalized)
         """
+        # Normalize positions to [0, 1]
+        norm_ball_x = self.ball.pos.x / WIDTH
+        norm_ball_y = self.ball.pos.y / HEIGHT
+        norm_p1_y = self.player_1.rect.y / HEIGHT
+        norm_p2_y = self.player_2.rect.y / HEIGHT
+
+        # Normalize velocity (assuming max speed approx 20 for safety)
+        # Actual speed starts at 7 and might increase if implemented, but 20 is a safe upper bound
+        MAX_SPEED = 20.0
+        norm_vel_x = (self.ball.direction.x * self.ball.speed) / MAX_SPEED
+        norm_vel_y = (self.ball.direction.y * self.ball.speed) / MAX_SPEED
+
         return np.array(
             [
-                self.ball.pos.x,
-                self.ball.pos.y,
-                self.ball.direction.x * self.ball.speed,
-                self.ball.direction.y * self.ball.speed,
-                self.player_1.rect.y,
-                self.player_2.rect.y,
+                norm_ball_x,
+                norm_ball_y,
+                norm_vel_x,
+                norm_vel_y,
+                norm_p1_y,
+                norm_p2_y,
             ],
             dtype=np.float32,
         )

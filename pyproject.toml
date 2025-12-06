@@ -16,6 +16,7 @@ dependencies = [
     "tensorboard",
     "pufferlib>=0.7.3",
     "torch",
+    "modal>=1.2.4",
 ]
 
 [tool.hatch.build.targets.wheel]

@@ -34,18 +34,22 @@ class PongQAgent:
         self.q_table: dict = defaultdict(lambda: np.zeros(action_space_size))
 
     def discretize_state(self, obs: np.ndarray) -> tuple:
-        """Convert continuous observation to discrete state tuple.
+        """Convert continuous normalized observation to discrete state tuple.
 
-        obs: [ball_x, ball_y, ball_vel_x, ball_vel_y, player1_y, player2_y]
+        obs: [norm_ball_x, norm_ball_y, norm_vel_x, norm_vel_y, norm_p1_y, norm_p2_y]
         """
         ball_x, ball_y, ball_vx, ball_vy, player1_y, player2_y = obs
 
-        # Discretize into bins
-        ball_x_bin = int(ball_x // 50)
-        ball_y_bin = int(ball_y // 50)
-        ball_vx_bin = 1 if ball_vx > 0 else 0  # Ball moving right or left
-        ball_vy_bin = 1 if ball_vy > 0 else 0  # Ball moving down or up
-        player1_y_bin = int(player1_y // 50)
+        # Discretize into bins (adapted for normalized inputs 0-1)
+        # 8 bins for x (approx 50 pixels if width 400)
+        ball_x_bin = int(ball_x * 8)
+        # 6 bins for y (approx 50 pixels if height 300)
+        ball_y_bin = int(ball_y * 6)
+        
+        ball_vx_bin = 1 if ball_vx > 0 else 0
+        ball_vy_bin = 1 if ball_vy > 0 else 0
+        
+        player1_y_bin = int(player1_y * 6)
 
         return (ball_x_bin, ball_y_bin, ball_vx_bin, ball_vy_bin, player1_y_bin)
 

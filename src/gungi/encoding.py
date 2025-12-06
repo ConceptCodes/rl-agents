@@ -148,15 +148,16 @@ NUM_TURNCOAT_CHOICES = 3  # Max aux choices for turncoat
 MOVE_OFFSET = 0
 DROP_OFFSET = NUM_MOVE_ACTIONS  # 6561
 SETUP_OFFSET = DROP_OFFSET + NUM_DROP_ACTIONS  # 7695
-TURNCOAT_OFFSET = SETUP_OFFSET + NUM_SETUP_ACTIONS  # 8829
+PASS_SETUP_OFFSET = SETUP_OFFSET + NUM_SETUP_ACTIONS  # 8829
+TURNCOAT_OFFSET = PASS_SETUP_OFFSET + 1  # 8830
 
 # Total actions (including turncoat variants)
 # Turncoat: same as moves but with aux choice
 NUM_TURNCOAT_ACTIONS = NUM_SQUARES * NUM_SQUARES * NUM_TURNCOAT_CHOICES  # 19683
-TOTAL_ACTIONS = SETUP_OFFSET + NUM_SETUP_ACTIONS + NUM_TURNCOAT_ACTIONS  # 28512
+TOTAL_ACTIONS = PASS_SETUP_OFFSET + 1 + NUM_TURNCOAT_ACTIONS  # 28513
 
 # Simplified total (without separate turncoat encoding)
-NUM_ACTIONS = SETUP_OFFSET + NUM_SETUP_ACTIONS  # 8829
+NUM_ACTIONS = PASS_SETUP_OFFSET + 1  # 8830
 
 
 def square_to_idx(col: int, row: int) -> int:
@@ -199,6 +200,7 @@ def decode_action(action_idx: int) -> dict:
         - Move: {'type': 'move', 'src': (col, row), 'dst': (col, row)}
         - Drop: {'type': 'drop', 'piece': str, 'dst': (col, row)}
         - Setup: {'type': 'setup', 'piece': str, 'dst': (col, row)}
+        - PassSetup: {'type': 'pass_setup'}
     """
     if action_idx < DROP_OFFSET:
         # Move action
@@ -220,7 +222,7 @@ def decode_action(action_idx: int) -> dict:
             "piece": PIECE_NAMES[piece_idx],
             "dst": idx_to_square(dst_idx),
         }
-    else:
+    elif action_idx < PASS_SETUP_OFFSET:
         # Setup action
         setup_idx = action_idx - SETUP_OFFSET
         piece_idx = setup_idx // NUM_SQUARES
@@ -229,6 +231,11 @@ def decode_action(action_idx: int) -> dict:
             "type": "setup",
             "piece": PIECE_NAMES[piece_idx],
             "dst": idx_to_square(dst_idx),
+        }
+    else:
+        # Pass setup action (to end setup phase)
+        return {
+            "type": "pass_setup",
         }
 
 
@@ -243,7 +250,10 @@ def encode_action(move: Move, game: Game) -> int:
     Returns:
         Action index
     """
-    if move.frm is None:
+    if move.action == "pass_setup":
+        # Pass setup action
+        return PASS_SETUP_OFFSET
+    elif move.frm is None:
         # Drop or setup move
         if game.game_phase == "initial_setup":
             return encode_setup_action(move.piece, move.to)
@@ -266,7 +276,7 @@ def get_legal_moves(game: Game) -> List[Move]:
     rules = Ruleset(board_size=BOARD_SIZE, hand=player.hand_pieces)
 
     if game.game_phase == "initial_setup":
-        # Setup phase: can place pieces from hand
+        # Setup phase: can place pieces from hand or pass to end setup
         for piece in player.hand_pieces:
             # Determine valid rows based on color
             if player.color == BLACK:
@@ -288,6 +298,9 @@ def get_legal_moves(game: Game) -> List[Move]:
                     moves.append(
                         Move(piece=piece.name, frm=None, to=(col, row), action="setup")
                     )
+
+        # Add pass setup action (to end setup phase)
+        moves.append(Move(piece=None, frm=None, to=None, action="pass_setup"))
     else:
         # Game phase: board moves and drops
         # Board moves

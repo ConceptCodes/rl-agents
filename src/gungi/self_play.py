@@ -53,11 +53,11 @@ def play_game(
     move_count = 0
 
     while not game.is_terminal() and move_count < max_moves:
-        # Determine temperature
+        # Determine temperature (AlphaZero uses greedy after threshold)
         if move_count < temperature_threshold:
             temperature = 1.0  # More exploration early
         else:
-            temperature = 0.1  # More exploitation later
+            temperature = 0.0  # Greedy selection (AlphaZero standard)
 
         # Encode current state
         state = encode_board_state(game)

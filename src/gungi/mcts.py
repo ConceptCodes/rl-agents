@@ -19,9 +19,9 @@ if TYPE_CHECKING:
 class MCTSConfig:
     """Configuration for MCTS."""
 
-    num_simulations: int = 800
+    num_simulations: int = 800  # AlphaZero standard
     c_puct: float = 1.5  # Exploration constant
-    dirichlet_alpha: float = 0.3  # Noise for root node exploration
+    dirichlet_alpha: float = 0.15  # ~10/avg_legal_moves, Gungi has ~50-200 moves
     dirichlet_epsilon: float = 0.25  # Weight for noise at root
     temperature: float = 1.0  # Temperature for action selection
 
@@ -185,7 +185,13 @@ class MCTS:
             # Get value
             if scratch_game.is_terminal():
                 # Terminal node: use actual game result
+                # get_result() returns value from BLACK's perspective
+                # Convert to current player's perspective
                 value = scratch_game.get_result()
+                if (
+                    scratch_game.turn.color == scratch_game.player_2.color
+                ):  # White's turn
+                    value = -value
             else:
                 # Non-terminal: expand and evaluate with network
                 state = encode_board_state(scratch_game)

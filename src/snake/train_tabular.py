@@ -33,17 +33,18 @@ class SnakeQAgent:
 
         self.q_table: dict = defaultdict(lambda: np.zeros(action_space_size))
 
-        # Discretization bins for Snake observation space
+        # Discretization bins for Snake observation space (normalized)
         # obs: [rel_food_x, rel_food_y, food_x, food_y, head_x, head_y, direction]
+        # rel_food is [-1, 1], others [0, 1]
         self.bins = [10, 10, 8, 8, 8, 8, 4]
         self.bin_ranges = [
-            np.linspace(-400, 400, self.bins[0]),  # rel_food_x
-            np.linspace(-300, 300, self.bins[1]),  # rel_food_y
-            np.linspace(0, 400, self.bins[2]),  # food_x
-            np.linspace(0, 300, self.bins[3]),  # food_y
-            np.linspace(0, 400, self.bins[4]),  # head_x
-            np.linspace(0, 300, self.bins[5]),  # head_y
-            np.linspace(0, 3, self.bins[6]),  # direction
+            np.linspace(-1.0, 1.0, self.bins[0]),  # rel_food_x
+            np.linspace(-1.0, 1.0, self.bins[1]),  # rel_food_y
+            np.linspace(0.0, 1.0, self.bins[2]),   # food_x
+            np.linspace(0.0, 1.0, self.bins[3]),   # food_y
+            np.linspace(0.0, 1.0, self.bins[4]),   # head_x
+            np.linspace(0.0, 1.0, self.bins[5]),   # head_y
+            np.linspace(0.0, 1.0, self.bins[6]),   # direction
         ]
 
     def discretize_state(self, obs: np.ndarray) -> tuple:

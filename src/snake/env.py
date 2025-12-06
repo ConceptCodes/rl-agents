@@ -26,24 +26,17 @@ class SnakeEnv(gym.Env):
             title="Snake - RL Training", render_ui=self.render_mode == "human"
         )
 
-        adjusted_width = WIDTH - SIZE
-        adjusted_height = HEIGHT - SIZE
-
-        # Observation space [rel_food_x, rel_food_y, food_x, food_y, head_x, head_y, direction]
+        # Observation space:
+        # [rel_food_x, rel_food_y, food_x, food_y, head_x, head_y, direction,
+        #  danger_up, danger_down, danger_left, danger_right]
+        # Normalized to [-1, 1] or [0, 1] range
         self.observation_space = gym.spaces.Box(
             low=np.array(
-                [-adjusted_width, -adjusted_height, 0, 0, 0, 0, 0], dtype=np.float32
+                [-1.0, -1.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0],
+                dtype=np.float32,
             ),
             high=np.array(
-                [
-                    adjusted_width,
-                    adjusted_height,
-                    adjusted_width,
-                    adjusted_height,
-                    adjusted_width,
-                    adjusted_height,
-                    3,
-                ],
+                [1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0, 1.0],
                 dtype=np.float32,
             ),
             dtype=np.float32,
@@ -56,20 +49,38 @@ class SnakeEnv(gym.Env):
         """Convert internal state to observation format.
 
         Returns:
-            np.array: Observation with relative food and player positions
+            np.array: Observation with relative food, player positions, and danger signals (normalized)
         """
         dir_map = {"up": 0, "down": 1, "left": 2, "right": 3}
-        rel_food_x = self.game.food.x - self.game.player.head.x
-        rel_food_y = self.game.food.y - self.game.player.head.y
+
+        # Normalize coordinates
+        rel_food_x = (self.game.food.x - self.game.player.head.x) / WIDTH
+        rel_food_y = (self.game.food.y - self.game.player.head.y) / HEIGHT
+
+        norm_food_x = self.game.food.x / WIDTH
+        norm_food_y = self.game.food.y / HEIGHT
+
+        norm_head_x = self.game.player.head.x / WIDTH
+        norm_head_y = self.game.player.head.y / HEIGHT
+
+        norm_dir = dir_map[self.game.player.direction] / 3.0
+
+        # Get danger signals for all 4 directions
+        danger_up, danger_down, danger_left, danger_right = self._get_danger_signals()
+
         return np.array(
             [
                 rel_food_x,
                 rel_food_y,
-                self.game.food.x,
-                self.game.food.y,
-                self.game.player.head.x,
-                self.game.player.head.y,
-                dir_map[self.game.player.direction],
+                norm_food_x,
+                norm_food_y,
+                norm_head_x,
+                norm_head_y,
+                norm_dir,
+                danger_up,
+                danger_down,
+                danger_left,
+                danger_right,
             ],
             dtype=np.float32,
         )
@@ -130,9 +141,23 @@ class SnakeEnv(gym.Env):
         direction = action_map[action]
 
         self.game._handle_input(direction)
+
+        # Calculate distance BEFORE move
+        prev_dist = self._normalized_distance()
+
         self.game.player.move()
 
-        reward = -0.01  # Small per-step penalty to encourage efficiency
+        # Calculate distance AFTER move
+        new_dist = self._normalized_distance()
+
+        # Basic step penalty
+        reward = -0.01
+
+        # Reward Shaping: Reward moving towards food, punish moving away
+        # Scaling factor 10.0 gives roughly +/- 0.3 reward per step for moving closer/further
+        dist_reward = (prev_dist - new_dist) * 10.0
+        reward += dist_reward
+
         terminated = False
 
         # Check for food collision FIRST (before death check)
@@ -204,6 +229,33 @@ class SnakeEnv(gym.Env):
             if segment.x == next_x and segment.y == next_y:
                 return False
         return True
+
+    def _get_danger_signals(self):
+        """Check if immediate adjacent cells are dangerous (wall or body).
+
+        Returns:
+            tuple: (danger_up, danger_down, danger_left, danger_right) as floats (0.0 or 1.0)
+        """
+        head = self.game.player.head
+        body_positions = set()
+        for segment in self.game.player.body[1:]:
+            body_positions.add((segment.x, segment.y))
+
+        def is_dangerous(x, y):
+            # Wall collision
+            if x < 0 or x >= WIDTH or y < 0 or y >= HEIGHT:
+                return 1.0
+            # Body collision
+            if (x, y) in body_positions:
+                return 1.0
+            return 0.0
+
+        danger_up = is_dangerous(head.x, head.y - SIZE)
+        danger_down = is_dangerous(head.x, head.y + SIZE)
+        danger_left = is_dangerous(head.x - SIZE, head.y)
+        danger_right = is_dangerous(head.x + SIZE, head.y)
+
+        return danger_up, danger_down, danger_left, danger_right
 
 
 def make_puffer_snake_env(render: bool = False, buf=None):

@@ -12,10 +12,29 @@ import torch.nn as nn
 import torch.nn.functional as F
 from torch.utils.tensorboard import SummaryWriter
 
+import copy
+
+
+def format_duration(seconds: float) -> str:
+    """Format duration in seconds to human-readable string."""
+    if seconds < 60:
+        return f"{seconds:.1f}s"
+    elif seconds < 3600:
+        minutes = seconds / 60
+        return f"{minutes:.1f}m"
+    else:
+        hours = seconds / 3600
+        return f"{hours:.1f}h"
+
+
 from network import GungiNetwork, GungiNetworkSmall
 from mcts import MCTSConfig
 from replay_buffer import ReplayBuffer
-from self_play import play_games_parallel, evaluate_against_random
+from self_play import (
+    play_games_parallel,
+    evaluate_against_random,
+    evaluate_against_network,
+)
 from encoding import NUM_ACTIONS
 
 
@@ -33,7 +52,7 @@ class AlphaZeroTrainer:
         self,
         num_iterations: int = 100,
         games_per_iteration: int = 25,
-        mcts_simulations: int = 400,
+        mcts_simulations: int = 800,  # AlphaZero standard
         batch_size: int = 256,
         replay_buffer_size: int = 100_000,
         learning_rate: float = 0.001,
@@ -44,6 +63,8 @@ class AlphaZeroTrainer:
         device: str = "auto",
         network_size: str = "small",
         num_workers: int = 0,
+        eval_games: int = 20,  # Games for network vs network evaluation
+        promotion_threshold: float = 0.55,  # Win rate needed to promote new network
     ):
         self.num_iterations = num_iterations
         self.games_per_iteration = games_per_iteration
@@ -53,16 +74,16 @@ class AlphaZeroTrainer:
         self.checkpoint_dir = Path(checkpoint_dir)
         self.log_dir = Path(log_dir)
         self.num_workers = num_workers
+        self.eval_games = eval_games
+        self.promotion_threshold = promotion_threshold
+        self.network_size = network_size
 
         # Setup device
         self.device = self._resolve_device(device)
         print(f"Using device: {self.device}")
 
         # Create network
-        if network_size == "small":
-            self.network = GungiNetworkSmall().to(self.device)
-        else:
-            self.network = GungiNetwork().to(self.device)
+        self.network = self._create_network(network_size)
 
         # Setup optimizer
         self.optimizer = torch.optim.Adam(
@@ -79,13 +100,18 @@ class AlphaZeroTrainer:
         # Replay buffer
         self.replay_buffer = ReplayBuffer(max_size=replay_buffer_size)
 
-        # MCTS config
+        # MCTS config (dirichlet_alpha ~10/avg_legal_moves, Gungi has ~50-200 moves)
         self.mcts_config = MCTSConfig(
             num_simulations=mcts_simulations,
             c_puct=1.5,
-            dirichlet_alpha=0.3,
+            dirichlet_alpha=0.15,  # Reduced for Gungi's larger action space
             dirichlet_epsilon=0.25,
         )
+
+        # Best network tracking (AlphaZero evaluates against previous best)
+        self.best_network = self._create_network(network_size)
+        self.best_network.load_state_dict(self.network.state_dict())
+        self.best_network.eval()
 
         # Logging
         self.checkpoint_dir.mkdir(parents=True, exist_ok=True)
@@ -96,6 +122,13 @@ class AlphaZeroTrainer:
         self.current_iteration = 0
         self.total_games = 0
         self.total_steps = 0
+
+    def _create_network(self, network_size: str) -> GungiNetwork:
+        """Create a network instance based on size specification."""
+        if network_size == "small":
+            return GungiNetworkSmall().to(self.device)
+        else:
+            return GungiNetwork().to(self.device)
 
     def _resolve_device(self, device_option: str) -> torch.device:
         """Resolve device string to torch.device."""
@@ -155,7 +188,9 @@ class AlphaZeroTrainer:
             self.replay_buffer.add_game(records)
             self.total_games += self.games_per_iteration
             self_play_time = time.time() - self_play_start
-            print(f"    Generated {len(records)} samples in {self_play_time:.1f}s")
+            print(
+                f"    Generated {len(records)} samples in {format_duration(self_play_time)}"
+            )
             print(f"    Replay buffer size: {len(self.replay_buffer)}")
 
             # 2. Training
@@ -166,7 +201,7 @@ class AlphaZeroTrainer:
                 train_time = time.time() - train_start
                 print(f"    Policy loss: {metrics['policy_loss']:.4f}")
                 print(f"    Value loss: {metrics['value_loss']:.4f}")
-                print(f"    Training time: {train_time:.1f}s")
+                print(f"    Training time: {format_duration(train_time)}")
 
                 # Log metrics
                 self.writer.add_scalar("Loss/policy", metrics["policy_loss"], iteration)
@@ -178,6 +213,7 @@ class AlphaZeroTrainer:
 
             # 3. Evaluation (every 10 iterations)
             if (iteration + 1) % 10 == 0:
+                # Evaluate against random baseline
                 print("  Evaluating against random...")
                 eval_results = evaluate_against_random(
                     self.network,
@@ -190,12 +226,39 @@ class AlphaZeroTrainer:
                     "Eval/win_rate_vs_random", eval_results["win_rate"], iteration
                 )
 
+                # AlphaZero: Evaluate against best network
+                print("  Evaluating against best network...")
+                vs_best_results = evaluate_against_network(
+                    network1=self.network,
+                    network2=self.best_network,
+                    num_games=self.eval_games,
+                    mcts_simulations=100,
+                    device=self.device,
+                )
+                win_rate_vs_best = vs_best_results["net1_win_rate"]
+                print(f"    Win rate vs best: {win_rate_vs_best:.1%}")
+                self.writer.add_scalar(
+                    "Eval/win_rate_vs_best", win_rate_vs_best, iteration
+                )
+
+                # Promote new network if it beats the best
+                if win_rate_vs_best >= self.promotion_threshold:
+                    print(
+                        f"    New network promoted (win rate {win_rate_vs_best:.1%} >= {self.promotion_threshold:.1%})"
+                    )
+                    self.best_network.load_state_dict(self.network.state_dict())
+                    self._save_checkpoint(iteration + 1, is_best=True)
+                else:
+                    print(
+                        f"    Network not promoted (win rate {win_rate_vs_best:.1%} < {self.promotion_threshold:.1%})"
+                    )
+
             # 4. Checkpoint (every 10 iterations)
             if (iteration + 1) % 10 == 0:
                 self._save_checkpoint(iteration + 1)
 
             iter_time = time.time() - iter_start
-            print(f"  Iteration time: {iter_time:.1f}s")
+            print(f"  Iteration time: {format_duration(iter_time)}")
             print()
 
             # Update scheduler
@@ -268,10 +331,14 @@ class AlphaZeroTrainer:
             "total_loss": (total_policy_loss + total_value_loss) / max(num_batches, 1),
         }
 
-    def _save_checkpoint(self, iteration: int, final: bool = False):
+    def _save_checkpoint(
+        self, iteration: int, final: bool = False, is_best: bool = False
+    ):
         """Save training checkpoint."""
         if final:
             path = self.checkpoint_dir / "gungi_alphazero_final.pt"
+        elif is_best:
+            path = self.checkpoint_dir / "gungi_alphazero_best.pt"
         else:
             path = self.checkpoint_dir / f"gungi_alphazero_iter_{iteration}.pt"
 
@@ -323,7 +390,10 @@ def main():
         "--games-per-iter", type=int, default=25, help="Self-play games per iteration"
     )
     parser.add_argument(
-        "--mcts-sims", type=int, default=400, help="MCTS simulations per move"
+        "--mcts-sims",
+        type=int,
+        default=800,
+        help="MCTS simulations per move (AlphaZero standard)",
     )
     parser.add_argument(
         "--batch-size", type=int, default=256, help="Training batch size"
@@ -359,6 +429,18 @@ def main():
         default=0,
         help="Number of parallel workers for self-play (0 = sequential)",
     )
+    parser.add_argument(
+        "--eval-games",
+        type=int,
+        default=20,
+        help="Number of games for network vs network evaluation",
+    )
+    parser.add_argument(
+        "--promotion-threshold",
+        type=float,
+        default=0.55,
+        help="Win rate threshold to promote new network (AlphaZero uses 0.55)",
+    )
     args = parser.parse_args()
 
     trainer = AlphaZeroTrainer(
@@ -374,6 +456,8 @@ def main():
         device=args.device,
         network_size=args.network_size,
         num_workers=args.workers,
+        eval_games=args.eval_games,
+        promotion_threshold=args.promotion_threshold,
     )
 
     trainer.train(resume_from=args.resume)
